@@ -106,4 +106,87 @@ public class Siec {
             }
         }
 	}
+	
+	/**
+     * Зберігає ваги мережі у файл
+     * @param filename ім'я файлу для збереження
+     */
+    public void zapiszWagi(String filename) {
+        try (java.io.PrintWriter writer = new java.io.PrintWriter(new java.io.FileWriter(filename))) {
+            // Записуємо кількість шарів
+            writer.println(liczba_warstw);
+            
+            // Для кожного шару
+            for (int i = 0; i < liczba_warstw; i++) {
+                Warstwa warstwa = warstwy[i];
+                
+                // Записуємо кількість нейронів у шарі
+                writer.println(warstwa.liczba_neuronow);
+                
+                // Для кожного нейрона в шарі
+                for (int j = 0; j < warstwa.liczba_neuronow; j++) {
+                    Neuron neuron = warstwa.neurony[j];
+                    
+                    // Записуємо кількість вхідних зв'язків (ваг)
+                    writer.println(neuron.liczba_wejsc);
+                    
+                    // Записуємо всі ваги нейрона
+                    for (int k = 0; k <= neuron.liczba_wejsc; k++) {
+                        writer.println(neuron.wagi[k]);
+                    }
+                }
+            }
+            System.out.println("Успішно збережено ваги у файл: " + filename);
+        } catch (java.io.IOException e) {
+            System.err.println("Помилка при збереженні ваг: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Завантажує ваги мережі з файлу
+     * @param filename ім'я файлу для завантаження
+     */
+    public void wczytajWagi(String filename) throws java.io.IOException {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(filename))) {
+            // Читаємо кількість шарів
+            int liczbaWarstw = Integer.parseInt(reader.readLine());
+            
+            if (liczbaWarstw != liczba_warstw) {
+                throw new java.io.IOException("Невідповідність кількості шарів");
+            }
+            
+            // Для кожного шару
+            for (int i = 0; i < liczba_warstw; i++) {
+                Warstwa warstwa = warstwy[i];
+                
+                // Читаємо кількість нейронів у шарі
+                int liczbaNeuronovW = Integer.parseInt(reader.readLine());
+                
+                if (liczbaNeuronovW != warstwa.liczba_neuronow) {
+                    throw new java.io.IOException("Невідповідність кількості нейронів у шарі " + i);
+                }
+                
+                // Для кожного нейрона в шарі
+                for (int j = 0; j < warstwa.liczba_neuronow; j++) {
+                    Neuron neuron = warstwa.neurony[j];
+                    
+                    // Читаємо кількість вхідних зв'язків (ваг)
+                    int liczbaWag = Integer.parseInt(reader.readLine());
+                    
+                    if (liczbaWag != neuron.liczba_wejsc) {
+                        throw new java.io.IOException("Невідповідність кількості ваг у нейроні " + j + " шару " + i);
+                    }
+                    
+                    // Читаємо всі ваги нейрона
+                    for (int k = 0; k <= neuron.liczba_wejsc; k++) {
+                        neuron.wagi[k] = Double.parseDouble(reader.readLine());
+                    }
+                }
+            }
+            System.out.println("Успішно завантажено ваги з файлу: " + filename);
+        } catch (java.io.IOException e) {
+            System.err.println("Помилка при завантаженні ваг: " + e.getMessage());
+            throw e;  // Re-throw the exception to be handled by the caller
+        }
+    }
 }
