@@ -5,3 +5,5 @@ resized_data/.DS_Store
 .DS_Store
 /.vscode
 letters_dataset.csv
+/dataset
+model.dat
