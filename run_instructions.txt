@@ -1,0 +1,19 @@
+# Інструкції для запуску тесту
+
+# 1. Перейдіть до директорії проекту
+cd /Users/nazarii/IdeaProjects/MLP-v2
+
+# 2. Скомпілюйте всі класи разом
+javac DataProcessor.java Neuron.java Warstwa.java Siec.java Test.java TestDataProcessor.java
+
+# 3а. Запуск тестового класу зі стандартними налаштуваннями (для маленької підмножини даних)
+java TestDataProcessor
+
+# 3б. Запуск з більшою кількістю пам'яті (для великого набору даних)
+java -Xmx4g TestDataProcessor
+
+# Примітка: переконайтесь, що файл letters_dataset.csv знаходиться 
+# в директорії /Users/nazarii/IdeaProjects/MLP-v2
+
+# Якщо помилка OutOfMemoryError продовжує з'являтися, спробуйте збільшити розмір пам'яті
+# наприклад: java -Xmx8g TestDataProcessor
