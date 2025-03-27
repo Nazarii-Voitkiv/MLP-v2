@@ -31,7 +31,7 @@ public class DataProcessor {
         int lineCount = 0;
         int pixelCount = 16384; // Constant for 128x128 pixels
         
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath), 8192)) {
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath), 16384)) { // Збільшуємо розмір буфера
             String line;
             while ((line = br.readLine()) != null && (maxSamples == -1 || lineCount < maxSamples)) {
                 String[] values = line.split(",");
@@ -50,26 +50,33 @@ public class DataProcessor {
                 double[] imageData = new double[pixelCount];
                 for (int i = 0; i < pixelCount && i + 1 < values.length; i++) {
                     try {
-                        // Convert string to double and normalize (divide by 255)
-                        imageData[i] = Double.parseDouble(values[i + 1]) / 255.0;
+                        // Оптимізація: перевіряємо чи не порожній рядок перед парсингом
+                        String val = values[i + 1].trim();
+                        if (!val.isEmpty()) {
+                            imageData[i] = Double.parseDouble(val) / 255.0;
+                        } else {
+                            imageData[i] = 0.0;
+                        }
                     } catch (NumberFormatException e) {
-                        System.out.println("Помилка конвертації у рядку " + lineCount + 
-                                          ", піксель " + i + ": " + values[i + 1]);
                         imageData[i] = 0.0; // Default value in case of parsing error
                     }
                 }
                 imagesList.add(imageData);
                 lineCount++;
                 
-                // Periodic garbage collection to help with memory
-                if (lineCount % 100 == 0) {
+                // Periodic garbage collection to help with memory - збільшуємо частоту
+                if (lineCount % 50 == 0) {
                     System.out.println("Завантажено " + lineCount + " зразків...");
+                    // Знищуємо непотрібні об'єкти для економії пам'яті
+                    values = null;
+                    line = null;
                     System.gc(); // Request garbage collection
                 }
             }
         }
         
         // Convert lists to arrays
+        System.out.println("Конвертація даних у масиви...");
         images = new double[imagesList.size()][];
         labels = new double[labelsList.size()][];
         
@@ -77,6 +84,11 @@ public class DataProcessor {
             images[i] = imagesList.get(i);
             labels[i] = labelsList.get(i);
         }
+        
+        // Звільнення пам'яті після конвертації
+        imagesList.clear();
+        labelsList.clear();
+        System.gc();
         
         System.out.println("Завантажено всього " + images.length + " зразків з мітками");
     }
@@ -135,5 +147,91 @@ public class DataProcessor {
         }
         return "Dataset contains " + images.length + " samples, each with " + 
                images[0].length + " features and " + labels[0].length + " classes";
+    }
+
+    // Додайте новий метод для балансування даних
+    public void loadBalancedDataFromCSV(String filePath, int samplesPerClass) throws IOException {
+        List<double[]> imagesM = new ArrayList<>();
+        List<double[]> labelsM = new ArrayList<>();
+        List<double[]> imagesO = new ArrayList<>();
+        List<double[]> labelsO = new ArrayList<>();
+        List<double[]> imagesN = new ArrayList<>();
+        List<double[]> labelsN = new ArrayList<>();
+        
+        int countM = 0, countO = 0, countN = 0;
+        int pixelCount = 16384; // Constant for 128x128 pixels
+        
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = br.readLine()) != null && 
+                   (countM < samplesPerClass || countO < samplesPerClass || countN < samplesPerClass)) {
+                
+                String[] values = line.split(",");
+                if (values.length < pixelCount + 1) continue;
+                
+                String label = values[0];
+                
+                // Пропускаємо, якщо вже досягнуто ліміт для цього класу
+                if ((label.equals("M") && countM >= samplesPerClass) ||
+                    (label.equals("O") && countO >= samplesPerClass) ||
+                    (label.equals("N") && countN >= samplesPerClass)) {
+                    continue;
+                }
+                
+                // Створюємо масив пікселів
+                double[] imageData = new double[pixelCount];
+                for (int i = 0; i < pixelCount && i + 1 < values.length; i++) {
+                    try {
+                        String val = values[i + 1].trim();
+                        if (!val.isEmpty()) {
+                            imageData[i] = Double.parseDouble(val) / 255.0;
+                        } else {
+                            imageData[i] = 0.0;
+                        }
+                    } catch (NumberFormatException e) {
+                        imageData[i] = 0.0; // Default value in case of parsing error
+                    }
+                }
+                
+                // Додаємо до відповідного списку
+                double[] oneHotLabel = convertToOneHot(label);
+                
+                if (label.equals("M")) {
+                    imagesM.add(imageData);
+                    labelsM.add(oneHotLabel);
+                    countM++;
+                    if (countM % 100 == 0) System.out.println("Завантажено M: " + countM);
+                } else if (label.equals("O")) {
+                    imagesO.add(imageData);
+                    labelsO.add(oneHotLabel);
+                    countO++;
+                    if (countO % 100 == 0) System.out.println("Завантажено O: " + countO);
+                } else if (label.equals("N")) {
+                    imagesN.add(imageData);
+                    labelsN.add(oneHotLabel);
+                    countN++;
+                    if (countN % 100 == 0) System.out.println("Завантажено N: " + countN);
+                }
+            }
+        }
+        
+        // Об'єднуємо списки
+        List<double[]> allImages = new ArrayList<>();
+        List<double[]> allLabels = new ArrayList<>();
+        
+        allImages.addAll(imagesM);
+        allImages.addAll(imagesO);
+        allImages.addAll(imagesN);
+        
+        allLabels.addAll(labelsM);
+        allLabels.addAll(labelsO);
+        allLabels.addAll(labelsN);
+        
+        // Конвертуємо у масиви
+        images = allImages.toArray(new double[0][]);
+        labels = allLabels.toArray(new double[0][]);
+        
+        System.out.println("Завантажено балансований набір даних:");
+        System.out.println("M: " + countM + ", O: " + countO + ", N: " + countN);
     }
 }
