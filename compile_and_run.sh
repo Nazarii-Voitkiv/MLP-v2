@@ -11,10 +11,13 @@ $JAVAC -d . *.java
 
 if [ $? -eq 0 ]; then
     echo "Компіляція успішно завершена."
-    echo "Запуск TestDataProcessor..."
     
-    # Запуск програми з більшим розміром пам'яті (4 ГБ)
-    $JAVA --enable-preview -Xmx4g -XX:+ShowCodeDetailsInExceptionMessages TestDataProcessor
+    # Вибір класу для запуску (за замовчуванням - LetterClassificationTest)
+    CLASS_TO_RUN=${1:-LetterClassificationTest}
+    echo "Запуск $CLASS_TO_RUN..."
+    
+    # Запуск програми з більшим розміром пам'яті
+    $JAVA --enable-preview -Xmx4g -XX:+ShowCodeDetailsInExceptionMessages $CLASS_TO_RUN
 else
     echo "Помилка компіляції."
 fi
