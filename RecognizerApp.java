@@ -139,9 +139,9 @@ public class RecognizerApp extends JFrame {
                 case 2: recognizedLetter = 'N'; break;
             }
             
-            // Форматування результату
+            // Форматування результату з підвищеним порогом впевненості (0.8 замість 0.5)
             String resultText;
-            if (maxValue >= 0.5) {
+            if (maxValue >= 0.8) {
                 resultText = String.format(
                     "Результат: %c (M:%.2f, O:%.2f, N:%.2f)",
                     recognizedLetter,
