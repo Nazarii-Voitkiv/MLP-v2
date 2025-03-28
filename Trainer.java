@@ -46,13 +46,13 @@ public class Trainer {
     
     private static void trainNewModel(NeuralNetwork net, List<Sample> samples) {
         // Налаштування параметрів
-        net.setDropoutRate(0.2);
+        net.setDropoutRate(0.05);
         net.setPatience(10);
         net.setValidationSplit(0.2);
         
         // Тренування мережі (20 епох)
         System.out.println("Тренування нейромережі (20 епох)...");
-        net.train(samples, 20);
+        net.train(samples, 50);
         
         // Збереження моделі
         try {
