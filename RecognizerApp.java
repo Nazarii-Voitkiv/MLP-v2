@@ -3,16 +3,19 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.*;
+import java.util.regex.*;
 
 public class RecognizerApp extends JFrame {
     private static final int CANVAS_SIZE = 280;
     private static final int PIXEL_SIZE = 28;
     private static final String MODEL_PATH = "model.dat";
+    private static final String DATA_DIR = "data";
 
     private DrawingPanel drawingPanel;
     private JLabel resultLabel;
-    private JButton recognizeButton, clearButton, saveButton, trainButton;
+    private JButton recognizeButton, clearButton, wrongLetterButton;
     private NeuralNetwork neuralNetwork;
 
     public RecognizerApp() {
@@ -40,44 +43,46 @@ public class RecognizerApp extends JFrame {
         resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 18));
         resultLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        // Створення нижньої панелі з кнопками (GridLayout 2x2)
-        JPanel buttonPanel = new JPanel(new GridLayout(2, 2, 10, 10));
+        // Створення нижньої панелі з кнопками (2 рядки)
+        JPanel buttonPanel = new JPanel(new BorderLayout(10, 10));
         buttonPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        
+        // Панель для верхніх кнопок (Розпізнати та Очистити)
+        JPanel topButtonPanel = new JPanel(new GridLayout(1, 2, 10, 0));
         
         recognizeButton = new JButton("Розпізнати");
         clearButton = new JButton("Очистити");
-        saveButton = new JButton("Зберегти як CSV");
-        trainButton = new JButton("Донавчити на цьому прикладі");
-        
-        // Поки що деякі кнопки неактивні
-        saveButton.setEnabled(false);
-        trainButton.setEnabled(false);
+        wrongLetterButton = new JButton("❌ Це не та літера");
         
         // Налаштування розміру та вигляду кнопок
         configureButton(recognizeButton);
         configureButton(clearButton);
-        configureButton(saveButton);
-        configureButton(trainButton);
+        configureButton(wrongLetterButton);
         
         // Додавання обробників подій
         recognizeButton.addActionListener(e -> recognizeDrawing());
         clearButton.addActionListener(e -> drawingPanel.clear());
-        saveButton.addActionListener(e -> saveAsCSV());
-        trainButton.addActionListener(e -> trainOnExample());
+        wrongLetterButton.addActionListener(e -> handleWrongLetter());
         
-        // Додавання кнопок на панель
-        buttonPanel.add(recognizeButton);
-        buttonPanel.add(clearButton);
-        buttonPanel.add(saveButton);
-        buttonPanel.add(trainButton);
+        // Додавання верхніх кнопок на панель
+        topButtonPanel.add(recognizeButton);
+        topButtonPanel.add(clearButton);
+        
+        // Додавання кнопки "Це не та літера" в окрему панель для центрування
+        JPanel bottomButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        bottomButtonPanel.add(wrongLetterButton);
+        
+        // Додавання панелей з кнопками на головну панель кнопок
+        buttonPanel.add(topButtonPanel, BorderLayout.NORTH);
+        buttonPanel.add(bottomButtonPanel, BorderLayout.SOUTH);
 
         // Додавання компонентів на форму
         add(resultLabel, BorderLayout.NORTH);
-        add(centeringPanel, BorderLayout.CENTER); // Use the centering panel instead
+        add(centeringPanel, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
 
-        // Налаштування розміру вікна (adjust to be slightly wider)
-        setSize(CANVAS_SIZE + 120, CANVAS_SIZE + 200);
+        // Налаштування розміру вікна
+        setSize(CANVAS_SIZE + 120, CANVAS_SIZE + 220); // Increased height from +150 to +220
         setLocationRelativeTo(null);
         setVisible(true);
     }
@@ -161,15 +166,125 @@ public class RecognizerApp extends JFrame {
             e.printStackTrace();
         }
     }
-    
-    private void saveAsCSV() {
-        // Заглушка для майбутньої реалізації
-        System.out.println("Функція збереження в CSV поки не реалізована");
+
+    /**
+     * Обробник для кнопки "Це не та літера"
+     */
+    private void handleWrongLetter() {
+        // Перевірка, чи є що зберігати
+        double[] imageData = drawingPanel.getBinarizedImage();
+        boolean hasDrawing = false;
+        for (double pixel : imageData) {
+            if (pixel > 0.1) {
+                hasDrawing = true;
+                break;
+            }
+        }
+        
+        if (!hasDrawing) {
+            JOptionPane.showMessageDialog(this, 
+                "Немає що зберігати. Спочатку намалюйте літеру.", 
+                "Помилка", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // Масив варіантів для вибору
+        Object[] options = { "M", "O", "N" };
+        
+        // Показуємо діалог з вибором правильної літери
+        int choice = JOptionPane.showOptionDialog(this,
+            "Яка це була літера?",
+            "Виберіть правильний варіант",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+            null,
+            options,
+            options[0]);
+            
+        if (choice == JOptionPane.CLOSED_OPTION) {
+            // Користувач закрив діалог
+            return;
+        }
+        
+        // Визначаємо обрану літеру
+        char letter = ' ';
+        switch (choice) {
+            case 0: letter = 'M'; break;
+            case 1: letter = 'O'; break;
+            case 2: letter = 'N'; break;
+        }
+        
+        try {
+            // Центруємо зображення перед збереженням
+            imageData = ImageProcessor.centerImage(imageData);
+            
+            // Генеруємо унікальне ім'я файлу і зберігаємо
+            String fileName = generateUniqueFileName(letter);
+            saveToCSV(imageData, fileName);
+            
+            // Показуємо повідомлення про успіх
+            JOptionPane.showMessageDialog(this,
+                "✅ Збережено приклад як " + fileName,
+                "Успіх",
+                JOptionPane.INFORMATION_MESSAGE);
+                
+            resultLabel.setText("Збережено як " + fileName);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                "Помилка при збереженні: " + e.getMessage(),
+                "Помилка",
+                JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
     }
     
-    private void trainOnExample() {
-        // Заглушка для майбутньої реалізації
-        System.out.println("Функція донавчання поки не реалізована");
+    /**
+     * Генерує унікальне ім'я файлу для зазначеної літери
+     */
+    private String generateUniqueFileName(char letter) {
+        int maxNumber = 0;
+        File dataDir = new File(DATA_DIR);
+        
+        // Створюємо директорію, якщо вона не існує
+        if (!dataDir.exists()) {
+            dataDir.mkdirs();
+        }
+        
+        File[] files = dataDir.listFiles();
+        
+        if (files != null) {
+            Pattern pattern = Pattern.compile(letter + "_(\\d+)\\.csv");
+            
+            for (File file : files) {
+                Matcher matcher = pattern.matcher(file.getName());
+                if (matcher.matches()) {
+                    int number = Integer.parseInt(matcher.group(1));
+                    maxNumber = Math.max(maxNumber, number);
+                }
+            }
+        }
+        
+        return String.format("%c_%03d.csv", letter, maxNumber + 1);
+    }
+    
+    /**
+     * Зберігає масив даних у CSV-файл
+     */
+    private void saveToCSV(double[] data, String fileName) throws IOException {
+        File file = new File(DATA_DIR, fileName);
+        
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            StringBuilder sb = new StringBuilder();
+            
+            for (int i = 0; i < data.length; i++) {
+                sb.append(data[i]);
+                if (i < data.length - 1) {
+                    sb.append(",");
+                }
+            }
+            
+            writer.write(sb.toString());
+        }
     }
 
     // Клас для панелі малювання
@@ -180,6 +295,8 @@ public class RecognizerApp extends JFrame {
         public DrawingPanel() {
             setPreferredSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
             setMinimumSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
+            // Add maximum size to ensure the panel doesn't shrink
+            setMaximumSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
             setBackground(Color.BLACK);
             setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
 
