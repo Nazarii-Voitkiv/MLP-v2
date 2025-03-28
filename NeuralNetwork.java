@@ -117,30 +117,6 @@ public class NeuralNetwork {
     }
     
     /**
-     * Applies softmax activation to an array of values
-     */
-    private double[] softmax(double[] values) {
-        // Find maximum value to avoid numerical overflow
-        double max = Arrays.stream(values).max().orElse(0);
-        
-        // Calculate exponentials
-        double[] exps = new double[values.length];
-        double sum = 0.0;
-        for (int i = 0; i < values.length; i++) {
-            exps[i] = Math.exp(values[i] - max);
-            sum += exps[i];
-        }
-        
-        // Normalize to get probabilities
-        double[] result = new double[values.length];
-        for (int i = 0; i < values.length; i++) {
-            result[i] = exps[i] / sum;
-        }
-        
-        return result;
-    }
-    
-    /**
      * Forward pass through the network
      * 
      * @param input Input values
@@ -177,10 +153,8 @@ public class NeuralNetwork {
             }
         }
         
-        // Apply softmax activation to output layer
-        double[] finalOutputs = softmax(outputInputs);
-        
-        return new double[][] { hiddenOutputs, finalOutputs };
+        // Return raw outputs without softmax activation
+        return new double[][] { hiddenOutputs, outputInputs };
     }
     
     /**
@@ -416,7 +390,7 @@ public class NeuralNetwork {
      * Predicts the output for a given input
      * 
      * @param input Input data (784 values)
-     * @return Array of probabilities for each letter [M, O, N]
+     * @return Array of logits (raw, unnormalized outputs) for each letter [M, O, N]
      */
     public double[] predict(double[] input) {
         if (input.length != inputSize) {
@@ -428,7 +402,7 @@ public class NeuralNetwork {
         isTraining = false;
         
         double[][] outputs = forwardPass(input);
-        return outputs[1]; // Return the final outputs
+        return outputs[1]; // Return raw outputs (logits)
     }
     
     /**
