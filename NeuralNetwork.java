@@ -2,46 +2,43 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * Implementacja sieci neuronowej do rozpoznawania liter.
+ * Architektura: 784 → 512 → 256 → 128 → 64 → 3 (wejście → warstwy ukryte → wyjście)
+ */
 public class NeuralNetwork {
-    private int inputSize;
-    private int hidden0Size;
-    private int hidden1Size;
-    private int hidden2Size;
-    private int hidden3Size;
-    private int outputSize;
+    // Wymiary warstw sieci
+    private int inputSize;          // Rozmiar warstwy wejściowej (784 = 28x28 pikseli)
+    private int hidden0Size;        // Rozmiar pierwszej warstwy ukrytej
+    private int hidden1Size;        // Rozmiar drugiej warstwy ukrytej
+    private int hidden2Size;        // Rozmiar trzeciej warstwy ukrytej
+    private int hidden3Size;        // Rozmiar czwartej warstwy ukrytej
+    private int outputSize;         // Rozmiar warstwy wyjściowej (3 neurony dla M, O, N)
+
+    // Tablica przechowująca rozmiary wszystkich warstw dla łatwiejszej iteracji
+    private int[] layerSizes;
+
+    // Wagi i biasy
+    private double[][][] weights;    // [warstwa][neuronWejściowy][neuronWyjściowy]
+    private double[][] biases;       // [warstwa][neuron]
     
-    private double[][] weightsInputHidden0;  
-    private double[] biasesHidden0;
-    private double[][] weightsHidden0Hidden1;
-    private double[] biasesHidden1;
-    private double[][] weightsHidden1Hidden2;
-    private double[] biasesHidden2;
-    private double[][] weightsHidden2Hidden3;
-    private double[] biasesHidden3;
-    private double[][] weightsHidden3Output;
-    private double[] biasesOutput;
+    // Najlepszy stan modelu do wczesnego zatrzymania
+    private double[][][] bestWeights;
+    private double[][] bestBiases;
 
-    private double learningRate;
+    private double learningRate;     // Współczynnik uczenia
+    private double dropoutRate = 0.0; // Współczynnik dropout (zapobiega przeuczeniu)
+    private boolean isTraining = false; // Flaga trybu treningowego
 
-    private double dropoutRate = 0.0;
-    private boolean isTraining = false;
+    // Parametry wczesnego zatrzymania
+    private int patience = 10;        // Liczba epok bez poprawy przed zatrzymaniem
+    private double bestValidationError = Double.MAX_VALUE; // Najniższy błąd walidacji
+    private int epochsSinceImprovement = 0;  // Liczba epok bez poprawy
+    private double validationSplit = 0.2;    // Procent danych używany do walidacji
 
-    private int patience = 10;
-    private double bestValidationError = Double.MAX_VALUE;
-    private int epochsSinceImprovement = 0;
-    private double validationSplit = 0.2;
-
-    private double[][] bestWeightsInputHidden0;
-    private double[] bestBiasesHidden0;
-    private double[][] bestWeightsHidden0Hidden1;
-    private double[] bestBiasesHidden1;
-    private double[][] bestWeightsHidden1Hidden2;
-    private double[] bestBiasesHidden2;
-    private double[][] bestWeightsHidden2Hidden3;
-    private double[] bestBiasesHidden3;
-    private double[][] bestWeightsHidden3Output;
-    private double[] bestBiasesOutput;
-
+    /**
+     * Konstruktor z pełną specyfikacją architektury sieci
+     */
     public NeuralNetwork(int inputSize, int hidden0Size, int hidden1Size, int hidden2Size, int hidden3Size, int outputSize, double learningRate) {
         this.inputSize = inputSize;
         this.hidden0Size = hidden0Size;
@@ -50,284 +47,197 @@ public class NeuralNetwork {
         this.hidden3Size = hidden3Size;
         this.outputSize = outputSize;
         this.learningRate = learningRate;
-
+        
+        // Inicjalizacja tablicy rozmiarów warstw dla wygody
+        this.layerSizes = new int[]{inputSize, hidden0Size, hidden1Size, hidden2Size, hidden3Size, outputSize};
+        
+        // Inicjalizacja wag i biasów
+        int numLayers = layerSizes.length - 1;
+        this.weights = new double[numLayers][][];
+        this.biases = new double[numLayers][];
+        
         initializeWeightsAndBiases();
     }
     
+    /**
+     * Konstruktor domyślny z predefiniowaną architekturą 784→512→256→128→64→3
+     */
     public NeuralNetwork() {
         this(784, 512, 256, 128, 64, 3, 0.01);
     }
 
+    /**
+     * Ustawia współczynnik dropout (procent neuronów tymczasowo wyłączanych podczas treningu)
+     */
     public void setDropoutRate(double rate) {
         if (rate < 0.0 || rate >= 1.0) {
-            throw new IllegalArgumentException("Dropout rate must be between 0 and 1");
+            throw new IllegalArgumentException("Współczynnik dropout musi być pomiędzy 0 a 1");
         }
         this.dropoutRate = rate;
     }
 
+    /**
+     * Ustawia cierpliwość dla wczesnego zatrzymania (ile epok bez poprawy przed zatrzymaniem)
+     */
     public void setPatience(int patience) {
         this.patience = patience;
     }
 
+    /**
+     * Ustawia procent danych używany do walidacji
+     */
     public void setValidationSplit(double ratio) {
         if (ratio <= 0.0 || ratio >= 1.0) {
-            throw new IllegalArgumentException("Validation split must be between 0 and 1");
+            throw new IllegalArgumentException("Podział walidacyjny musi być pomiędzy 0 a 1");
         }
         this.validationSplit = ratio;
     }
 
+    /**
+     * Inicjalizacja wag i biasów z użyciem inicjalizacji Xaviera/Glorota
+     */
     private void initializeWeightsAndBiases() {
-        weightsInputHidden0 = new double[inputSize][hidden0Size];
-        for (int i = 0; i < inputSize; i++) {
-            for (int j = 0; j < hidden0Size; j++) {
-                double limit = Math.sqrt(6.0 / (inputSize + hidden0Size));
-                weightsInputHidden0[i][j] = ThreadLocalRandom.current().nextDouble(-limit, limit);
+        int numLayers = layerSizes.length - 1;
+        
+        // Inicjalizacja wag i biasów dla każdej warstwy
+        for (int layer = 0; layer < numLayers; layer++) {
+            int inputNeurons = layerSizes[layer];
+            int outputNeurons = layerSizes[layer + 1];
+            
+            weights[layer] = new double[inputNeurons][outputNeurons];
+            biases[layer] = new double[outputNeurons];
+            
+            // Inicjalizacja Xaviera/Glorota dla wag
+            double limit = Math.sqrt(6.0 / (inputNeurons + outputNeurons));
+            
+            for (int i = 0; i < inputNeurons; i++) {
+                for (int j = 0; j < outputNeurons; j++) {
+                    weights[layer][i][j] = ThreadLocalRandom.current().nextDouble(-limit, limit);
+                }
             }
-        }
-
-        biasesHidden0 = new double[hidden0Size];
-        for (int j = 0; j < hidden0Size; j++) {
-            biasesHidden0[j] = ThreadLocalRandom.current().nextDouble(-0.1, 0.1);
-        }
-
-        weightsHidden0Hidden1 = new double[hidden0Size][hidden1Size];
-        for (int j = 0; j < hidden0Size; j++) {
-            for (int k = 0; k < hidden1Size; k++) {
-                double limit = Math.sqrt(6.0 / (hidden0Size + hidden1Size));
-                weightsHidden0Hidden1[j][k] = ThreadLocalRandom.current().nextDouble(-limit, limit);
+            
+            // Inicjalizacja biasów małymi losowymi wartościami
+            for (int j = 0; j < outputNeurons; j++) {
+                biases[layer][j] = ThreadLocalRandom.current().nextDouble(-0.1, 0.1);
             }
-        }
-
-        biasesHidden1 = new double[hidden1Size];
-        for (int k = 0; k < hidden1Size; k++) {
-            biasesHidden1[k] = ThreadLocalRandom.current().nextDouble(-0.1, 0.1);
-        }
-
-        weightsHidden1Hidden2 = new double[hidden1Size][hidden2Size];
-        for (int k = 0; k < hidden1Size; k++) {
-            for (int l = 0; l < hidden2Size; l++) {
-                double limit = Math.sqrt(6.0 / (hidden1Size + hidden2Size));
-                weightsHidden1Hidden2[k][l] = ThreadLocalRandom.current().nextDouble(-limit, limit);
-            }
-        }
-
-        biasesHidden2 = new double[hidden2Size];
-        for (int l = 0; l < hidden2Size; l++) {
-            biasesHidden2[l] = ThreadLocalRandom.current().nextDouble(-0.1, 0.1);
-        }
-
-        weightsHidden2Hidden3 = new double[hidden2Size][hidden3Size];
-        for (int l = 0; l < hidden2Size; l++) {
-            for (int m = 0; m < hidden3Size; m++) {
-                double limit = Math.sqrt(6.0 / (hidden2Size + hidden3Size));
-                weightsHidden2Hidden3[l][m] = ThreadLocalRandom.current().nextDouble(-limit, limit);
-            }
-        }
-
-        biasesHidden3 = new double[hidden3Size];
-        for (int m = 0; m < hidden3Size; m++) {
-            biasesHidden3[m] = ThreadLocalRandom.current().nextDouble(-0.1, 0.1);
-        }
-
-        weightsHidden3Output = new double[hidden3Size][outputSize];
-        for (int m = 0; m < hidden3Size; m++) {
-            for (int n = 0; n < outputSize; n++) {
-                double limit = Math.sqrt(6.0 / (hidden3Size + outputSize));
-                weightsHidden3Output[m][n] = ThreadLocalRandom.current().nextDouble(-limit, limit);
-            }
-        }
-
-        biasesOutput = new double[outputSize];
-        for (int n = 0; n < outputSize; n++) {
-            biasesOutput[n] = ThreadLocalRandom.current().nextDouble(-0.1, 0.1);
         }
     }
     
+    /**
+     * Funkcja aktywacji sigmoid: f(x) = 1 / (1 + e^(-x))
+     */
     private double sigmoid(double x) {
         return 1.0 / (1.0 + Math.exp(-x));
     }
 
+    /**
+     * Przeprowadza przejście w przód (forward pass) przez sieć neuronową
+     * Zwraca tablicę wyjść każdej warstwy
+     */
     private double[][] forwardPass(double[] input) {
-        double[] hidden0Inputs = new double[hidden0Size];
-        double[] hidden0Outputs = new double[hidden0Size];
+        int numLayers = layerSizes.length;
+        double[][] layerOutputs = new double[numLayers][];
         
-        for (int j = 0; j < hidden0Size; j++) {
-            hidden0Inputs[j] = biasesHidden0[j];
-            for (int i = 0; i < inputSize; i++) {
-                hidden0Inputs[j] += input[i] * weightsInputHidden0[i][j];
-            }
-            hidden0Outputs[j] = sigmoid(hidden0Inputs[j]);
-
-            if (isTraining && dropoutRate > 0) {
-                if (ThreadLocalRandom.current().nextDouble() < dropoutRate) {
-                    hidden0Outputs[j] = 0;
+        // Ustaw wejście jako wyjście pierwszej warstwy
+        layerOutputs[0] = input;
+        
+        // Przetwarzanie każdej warstwy
+        for (int layer = 0; layer < numLayers - 1; layer++) {
+            int currentLayerSize = layerSizes[layer];
+            int nextLayerSize = layerSizes[layer + 1];
+            layerOutputs[layer + 1] = new double[nextLayerSize];
+            
+            // Oblicz wyjście dla każdego neuronu w bieżącej warstwie
+            for (int j = 0; j < nextLayerSize; j++) {
+                double sum = biases[layer][j];
+                
+                for (int i = 0; i < currentLayerSize; i++) {
+                    sum += layerOutputs[layer][i] * weights[layer][i][j];
+                }
+                
+                // Zastosuj funkcję aktywacji (sigmoid dla warstw ukrytych, brak aktywacji dla warstwy wyjściowej)
+                boolean isOutputLayer = (layer == numLayers - 2);
+                
+                if (!isOutputLayer) {
+                    layerOutputs[layer + 1][j] = sigmoid(sum);
+                    
+                    // Zastosuj dropout podczas treningu
+                    if (isTraining && dropoutRate > 0) {
+                        if (ThreadLocalRandom.current().nextDouble() < dropoutRate) {
+                            layerOutputs[layer + 1][j] = 0;
+                        } else {
+                            layerOutputs[layer + 1][j] /= (1.0 - dropoutRate);
+                        }
+                    }
                 } else {
-                    hidden0Outputs[j] /= (1.0 - dropoutRate);
+                    layerOutputs[layer + 1][j] = sum; // Liniowe wyjście dla ostatniej warstwy
                 }
             }
         }
-
-        double[] hidden1Inputs = new double[hidden1Size];
-        double[] hidden1Outputs = new double[hidden1Size];
         
-        for (int k = 0; k < hidden1Size; k++) {
-            hidden1Inputs[k] = biasesHidden1[k];
-            for (int j = 0; j < hidden0Size; j++) {
-                hidden1Inputs[k] += hidden0Outputs[j] * weightsHidden0Hidden1[j][k];
-            }
-            hidden1Outputs[k] = sigmoid(hidden1Inputs[k]);
-
-            if (isTraining && dropoutRate > 0) {
-                if (ThreadLocalRandom.current().nextDouble() < dropoutRate) {
-                    hidden1Outputs[k] = 0;
-                } else {
-                    hidden1Outputs[k] /= (1.0 - dropoutRate);
-                }
-            }
-        }
-
-        double[] hidden2Inputs = new double[hidden2Size];
-        double[] hidden2Outputs = new double[hidden2Size];
-        
-        for (int l = 0; l < hidden2Size; l++) {
-            hidden2Inputs[l] = biasesHidden2[l];
-            for (int k = 0; k < hidden1Size; k++) {
-                hidden2Inputs[l] += hidden1Outputs[k] * weightsHidden1Hidden2[k][l];
-            }
-            hidden2Outputs[l] = sigmoid(hidden2Inputs[l]);
-
-            if (isTraining && dropoutRate > 0) {
-                if (ThreadLocalRandom.current().nextDouble() < dropoutRate) {
-                    hidden2Outputs[l] = 0;
-                } else {
-                    hidden2Outputs[l] /= (1.0 - dropoutRate);
-                }
-            }
-        }
-
-        double[] hidden3Inputs = new double[hidden3Size];
-        double[] hidden3Outputs = new double[hidden3Size];
-        
-        for (int m = 0; m < hidden3Size; m++) {
-            hidden3Inputs[m] = biasesHidden3[m];
-            for (int l = 0; l < hidden2Size; l++) {
-                hidden3Inputs[m] += hidden2Outputs[l] * weightsHidden2Hidden3[l][m];
-            }
-            hidden3Outputs[m] = sigmoid(hidden3Inputs[m]);
-
-            if (isTraining && dropoutRate > 0) {
-                if (ThreadLocalRandom.current().nextDouble() < dropoutRate) {
-                    hidden3Outputs[m] = 0;
-                } else {
-                    hidden3Outputs[m] /= (1.0 - dropoutRate);
-                }
-            }
-        }
-
-        double[] outputInputs = new double[outputSize];
-        for (int n = 0; n < outputSize; n++) {
-            outputInputs[n] = biasesOutput[n];
-            for (int m = 0; m < hidden3Size; m++) {
-                outputInputs[n] += hidden3Outputs[m] * weightsHidden3Output[m][n];
-            }
-        }
-        
-        return new double[][] { hidden0Outputs, hidden1Outputs, hidden2Outputs, hidden3Outputs, outputInputs };
+        return layerOutputs;
     }
     
+    /**
+     * Zapisuje aktualny stan modelu jako najlepszy
+     */
     private void saveModelState() {
-        bestWeightsInputHidden0 = new double[inputSize][hidden0Size];
-        bestBiasesHidden0 = new double[hidden0Size];
-        bestWeightsHidden0Hidden1 = new double[hidden0Size][hidden1Size];
-        bestBiasesHidden1 = new double[hidden1Size];
-        bestWeightsHidden1Hidden2 = new double[hidden1Size][hidden2Size];
-        bestBiasesHidden2 = new double[hidden2Size];
-        bestWeightsHidden2Hidden3 = new double[hidden2Size][hidden3Size];
-        bestBiasesHidden3 = new double[hidden3Size];
-        bestWeightsHidden3Output = new double[hidden3Size][outputSize];
-        bestBiasesOutput = new double[outputSize];
-
-        for (int i = 0; i < inputSize; i++) {
-            for (int j = 0; j < hidden0Size; j++) {
-                bestWeightsInputHidden0[i][j] = weightsInputHidden0[i][j];
+        int numLayers = layerSizes.length - 1;
+        bestWeights = new double[numLayers][][];
+        bestBiases = new double[numLayers][];
+        
+        // Głęboka kopia wszystkich wag i biasów
+        for (int layer = 0; layer < numLayers; layer++) {
+            int inputNeurons = layerSizes[layer];
+            int outputNeurons = layerSizes[layer + 1];
+            
+            bestWeights[layer] = new double[inputNeurons][outputNeurons];
+            bestBiases[layer] = new double[outputNeurons];
+            
+            // Kopiowanie wag
+            for (int i = 0; i < inputNeurons; i++) {
+                for (int j = 0; j < outputNeurons; j++) {
+                    bestWeights[layer][i][j] = weights[layer][i][j];
+                }
             }
-        }
-
-        for (int j = 0; j < hidden0Size; j++) {
-            bestBiasesHidden0[j] = biasesHidden0[j];
-            for (int k = 0; k < hidden1Size; k++) {
-                bestWeightsHidden0Hidden1[j][k] = weightsHidden0Hidden1[j][k];
+            
+            // Kopiowanie biasów
+            for (int j = 0; j < outputNeurons; j++) {
+                bestBiases[layer][j] = biases[layer][j];
             }
-        }
-
-        for (int k = 0; k < hidden1Size; k++) {
-            bestBiasesHidden1[k] = biasesHidden1[k];
-            for (int l = 0; l < hidden2Size; l++) {
-                bestWeightsHidden1Hidden2[k][l] = weightsHidden1Hidden2[k][l];
-            }
-        }
-
-        for (int l = 0; l < hidden2Size; l++) {
-            bestBiasesHidden2[l] = biasesHidden2[l];
-            for (int m = 0; m < hidden3Size; m++) {
-                bestWeightsHidden2Hidden3[l][m] = weightsHidden2Hidden3[l][m];
-            }
-        }
-
-        for (int m = 0; m < hidden3Size; m++) {
-            bestBiasesHidden3[m] = biasesHidden3[m];
-            for (int n = 0; n < outputSize; n++) {
-                bestWeightsHidden3Output[m][n] = weightsHidden3Output[m][n];
-            }
-        }
-
-        for (int n = 0; n < outputSize; n++) {
-            bestBiasesOutput[n] = biasesOutput[n];
         }
     }
     
+    /**
+     * Przywraca najlepszy zapisany stan modelu
+     */
     private void restoreBestModel() {
-        if (bestWeightsInputHidden0 == null) return;
-
-        for (int i = 0; i < inputSize; i++) {
-            for (int j = 0; j < hidden0Size; j++) {
-                weightsInputHidden0[i][j] = bestWeightsInputHidden0[i][j];
+        if (bestWeights == null) return;
+        
+        int numLayers = layerSizes.length - 1;
+        
+        // Przywróć wszystkie wagi i biasy
+        for (int layer = 0; layer < numLayers; layer++) {
+            int inputNeurons = layerSizes[layer];
+            int outputNeurons = layerSizes[layer + 1];
+            
+            // Przywróć wagi
+            for (int i = 0; i < inputNeurons; i++) {
+                for (int j = 0; j < outputNeurons; j++) {
+                    weights[layer][i][j] = bestWeights[layer][i][j];
+                }
             }
-        }
-
-        for (int j = 0; j < hidden0Size; j++) {
-            biasesHidden0[j] = bestBiasesHidden0[j];
-            for (int k = 0; k < hidden1Size; k++) {
-                weightsHidden0Hidden1[j][k] = bestWeightsHidden0Hidden1[j][k];
+            
+            // Przywróć biasy
+            for (int j = 0; j < outputNeurons; j++) {
+                biases[layer][j] = bestBiases[layer][j];
             }
-        }
-
-        for (int k = 0; k < hidden1Size; k++) {
-            biasesHidden1[k] = bestBiasesHidden1[k];
-            for (int l = 0; l < hidden2Size; l++) {
-                weightsHidden1Hidden2[k][l] = bestWeightsHidden1Hidden2[k][l];
-            }
-        }
-
-        for (int l = 0; l < hidden2Size; l++) {
-            biasesHidden2[l] = bestBiasesHidden2[l];
-            for (int m = 0; m < hidden3Size; m++) {
-                weightsHidden2Hidden3[l][m] = bestWeightsHidden2Hidden3[l][m];
-            }
-        }
-
-        for (int m = 0; m < hidden3Size; m++) {
-            biasesHidden3[m] = bestBiasesHidden3[m];
-            for (int n = 0; n < outputSize; n++) {
-                weightsHidden3Output[m][n] = bestWeightsHidden3Output[m][n];
-            }
-        }
-
-        for (int n = 0; n < outputSize; n++) {
-            biasesOutput[n] = bestBiasesOutput[n];
         }
     }
     
+    /**
+     * Oblicza błąd średniokwadratowy na zbiorze próbek
+     */
     private double evaluateError(List<Sample> samples) {
         double totalError = 0.0;
         
@@ -336,7 +246,7 @@ public class NeuralNetwork {
             double[] target = sample.getTarget();
             
             double[][] outputs = forwardPass(input);
-            double[] finalOutputs = outputs[4];
+            double[] finalOutputs = outputs[outputs.length - 1];
 
             for (int k = 0; k < outputSize; k++) {
                 totalError += Math.pow(target[k] - finalOutputs[k], 2);
@@ -346,6 +256,15 @@ public class NeuralNetwork {
         return totalError / (samples.size() * outputSize);
     }
     
+    /**
+     * Tworzy zmodyfikowaną wersję próbki przez zastosowanie różnych transformacji:
+     * - dodanie szumu
+     * - przesunięcie obrazu
+     * - wymazanie części obrazu
+     * - obrót obrazu
+     * - skalowanie obrazu
+     * - zniekształcenie elastyczne
+     */
     private Sample augmentSample(Sample sample) {
         double[] originalInput = sample.getInput();
         double[] augmentedInput = new double[originalInput.length];
@@ -534,6 +453,9 @@ public class NeuralNetwork {
         return new Sample(augmentedInput, sample.getTarget());
     }
     
+    /**
+     * Główna metoda treningu sieci neuronowej
+     */
     public void train(List<Sample> samples, int epochs) {
         int totalSamples = samples.size();
         if (totalSamples == 0) {
@@ -547,15 +469,16 @@ public class NeuralNetwork {
 
         learningRate = startLR;
         
+        // Wyświetlenie informacji o konfiguracji treningu
         System.out.println("Rozpoczęcie uczenia sieci neuronowej...");
-        System.out.println("Architektura: " + inputSize + " → " + hidden0Size + " → " + 
-                           hidden1Size + " → " + hidden2Size + " → " + hidden3Size + " → " + outputSize);
+        System.out.println("Architektura: " + getArchitectureString());
         System.out.println("Liczba epok: " + epochs);
         System.out.println("Rozmiar zbioru uczącego: " + totalSamples);
         System.out.println("Learning rate: początkowy=" + startLR + ", maksymalny=" + peakLR);
         System.out.println("Rozgrzewanie: " + warmupEpochs + " epok");
         System.out.println("Dropout rate: " + dropoutRate);
 
+        // Podział danych na zbiór treningowy i walidacyjny
         Collections.shuffle(samples);
         int validationSize = (int)(totalSamples * validationSplit);
         int trainingSize = totalSamples - validationSize;
@@ -566,249 +489,222 @@ public class NeuralNetwork {
         System.out.println("Rozmiar zbioru treningowego: " + trainingData.size());
         System.out.println("Rozmiar zbioru walidacyjnego: " + validationData.size());
 
+        // Resetowanie zmiennych śledzących dla wczesnego zatrzymania
         bestValidationError = Double.MAX_VALUE;
         epochsSinceImprovement = 0;
         
+        // Pętla treningowa
         for (int epoch = 0; epoch < epochs; epoch++) {
-            if (epoch < warmupEpochs) {
-                learningRate = startLR + (peakLR - startLR) * (epoch / (double)warmupEpochs);
-                System.out.println("Rozgrzewanie: Learning rate zwiększony do: " + learningRate);
-            } else if ((epoch - warmupEpochs) % 25 == 0 && epoch > warmupEpochs) {
-                learningRate *= 0.9;
-                System.out.println("Learning rate zmniejszony do: " + learningRate);
-            }
-
-            List<Sample> augmentedData = new ArrayList<>();
-            for (Sample s : trainingData) {
-                augmentedData.add(s);
-
-                int numAugmentations = ThreadLocalRandom.current().nextInt(3, 6);
-                for (int i = 0; i < numAugmentations; i++) {
-                    augmentedData.add(augmentSample(s));
-                }
-            }
-
-            if (epoch == 0) {
-                System.out.println("Liczba próbek augmentowanych: " + augmentedData.size());
-                System.out.println("Stosunek augmentacji: " + String.format("%.1f", 
-                    (double)augmentedData.size() / trainingData.size()) + "x");
-            }
+            // Harmonogram współczynnika uczenia
+            updateLearningRate(epoch, startLR, peakLR, warmupEpochs);
             
-            double totalTrainingError = 0.0;
-
-            isTraining = true;
-
-            Collections.shuffle(augmentedData);
+            // Tworzenie rozszerzonego zbioru danych
+            List<Sample> augmentedData = createAugmentedData(trainingData, epoch);
             
-            for (Sample sample : augmentedData) {
-                double[] input = sample.getInput();
-                double[] target = sample.getTarget();
-
-                double[][] outputs = forwardPass(input);
-                double[] hidden0Outputs = outputs[0];
-                double[] hidden1Outputs = outputs[1];
-                double[] hidden2Outputs = outputs[2];
-                double[] hidden3Outputs = outputs[3];
-                double[] finalOutputs = outputs[4];
-
-                double[] outputErrors = new double[outputSize];
-                for (int n = 0; n < outputSize; n++) {
-                    outputErrors[n] = target[n] - finalOutputs[n];
-                    totalTrainingError += Math.pow(outputErrors[n], 2);
-                }
-
-                double[] outputDeltas = new double[outputSize];
-                for (int n = 0; n < outputSize; n++) {
-                    outputDeltas[n] = outputErrors[n];
-                }
-
-                double[] hidden3Errors = new double[hidden3Size];
-                for (int m = 0; m < hidden3Size; m++) {
-                    if (hidden3Outputs[m] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    double error = 0.0;
-                    for (int n = 0; n < outputSize; n++) {
-                        error += outputDeltas[n] * weightsHidden3Output[m][n];
-                    }
-                    hidden3Errors[m] = error;
-                }
-
-                double[] hidden3Deltas = new double[hidden3Size];
-                for (int m = 0; m < hidden3Size; m++) {
-                    if (hidden3Outputs[m] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    hidden3Deltas[m] = hidden3Errors[m] * hidden3Outputs[m] * (1 - hidden3Outputs[m]);
-                    if (isTraining && dropoutRate > 0) {
-                        hidden3Deltas[m] *= (1.0 - dropoutRate);
-                    }
-                }
-
-                double[] hidden2Errors = new double[hidden2Size];
-                for (int l = 0; l < hidden2Size; l++) {
-                    if (hidden2Outputs[l] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    double error = 0.0;
-                    for (int m = 0; m < hidden3Size; m++) {
-                        error += hidden3Deltas[m] * weightsHidden2Hidden3[l][m];
-                    }
-                    hidden2Errors[l] = error;
-                }
-
-                double[] hidden2Deltas = new double[hidden2Size];
-                for (int l = 0; l < hidden2Size; l++) {
-                    if (hidden2Outputs[l] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    hidden2Deltas[l] = hidden2Errors[l] * hidden2Outputs[l] * (1 - hidden2Outputs[l]);
-                    if (isTraining && dropoutRate > 0) {
-                        hidden2Deltas[l] *= (1.0 - dropoutRate);
-                    }
-                }
-
-                double[] hidden1Errors = new double[hidden1Size];
-                for (int k = 0; k < hidden1Size; k++) {
-                    // Skip if this neuron was dropped out
-                    if (hidden1Outputs[k] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    double error = 0.0;
-                    for (int l = 0; l < hidden2Size; l++) {
-                        error += hidden2Deltas[l] * weightsHidden1Hidden2[k][l];
-                    }
-                    hidden1Errors[k] = error;
-                }
-
-                double[] hidden1Deltas = new double[hidden1Size];
-                for (int k = 0; k < hidden1Size; k++) {
-                    if (hidden1Outputs[k] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    hidden1Deltas[k] = hidden1Errors[k] * hidden1Outputs[k] * (1 - hidden1Outputs[k]);
-                    if (isTraining && dropoutRate > 0) {
-                        hidden1Deltas[k] *= (1.0 - dropoutRate);
-                    }
-                }
-
-                double[] hidden0Errors = new double[hidden0Size];
-                for (int j = 0; j < hidden0Size; j++) {
-                    if (hidden0Outputs[j] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    double error = 0.0;
-                    for (int k = 0; k < hidden1Size; k++) {
-                        error += hidden1Deltas[k] * weightsHidden0Hidden1[j][k];
-                    }
-                    hidden0Errors[j] = error;
-                }
-
-                double[] hidden0Deltas = new double[hidden0Size];
-                for (int j = 0; j < hidden0Size; j++) {
-                    if (hidden0Outputs[j] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    hidden0Deltas[j] = hidden0Errors[j] * hidden0Outputs[j] * (1 - hidden0Outputs[j]);
-                    if (isTraining && dropoutRate > 0) {
-                        hidden0Deltas[j] *= (1.0 - dropoutRate);
-                    }
-                }
-
-                for (int m = 0; m < hidden3Size; m++) {
-                    if (hidden3Outputs[m] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    for (int n = 0; n < outputSize; n++) {
-                        weightsHidden3Output[m][n] += learningRate * outputDeltas[n] * hidden3Outputs[m];
-                    }
-                }
-                
-                for (int n = 0; n < outputSize; n++) {
-                    biasesOutput[n] += learningRate * outputDeltas[n];
-                }
-
-                for (int l = 0; l < hidden2Size; l++) {
-                    if (hidden2Outputs[l] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    for (int m = 0; m < hidden3Size; m++) {
-                        if (hidden3Outputs[m] == 0 && isTraining && dropoutRate > 0) continue;
-                        
-                        weightsHidden2Hidden3[l][m] += learningRate * hidden3Deltas[m] * hidden2Outputs[l];
-                    }
-                }
-                
-                for (int m = 0; m < hidden3Size; m++) {
-                    if (hidden3Outputs[m] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    biasesHidden3[m] += learningRate * hidden3Deltas[m];
-                }
-
-                for (int k = 0; k < hidden1Size; k++) {
-                    if (hidden1Outputs[k] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    for (int l = 0; l < hidden2Size; l++) {
-                        if (hidden2Outputs[l] == 0 && isTraining && dropoutRate > 0) continue;
-                        
-                        weightsHidden1Hidden2[k][l] += learningRate * hidden2Deltas[l] * hidden1Outputs[k];
-                    }
-                }
-                
-                for (int l = 0; l < hidden2Size; l++) {
-                    if (hidden2Outputs[l] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    biasesHidden2[l] += learningRate * hidden2Deltas[l];
-                }
-
-                for (int j = 0; j < hidden0Size; j++) {
-                    if (hidden0Outputs[j] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    for (int k = 0; k < hidden1Size; k++) {
-                        if (hidden1Outputs[k] == 0 && isTraining && dropoutRate > 0) continue;
-                        
-                        weightsHidden0Hidden1[j][k] += learningRate * hidden1Deltas[k] * hidden0Outputs[j];
-                    }
-                }
-                
-                for (int k = 0; k < hidden1Size; k++) {
-                    if (hidden1Outputs[k] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    biasesHidden1[k] += learningRate * hidden1Deltas[k];
-                }
-
-                for (int i = 0; i < inputSize; i++) {
-                    for (int j = 0; j < hidden0Size; j++) {
-                        if (hidden0Outputs[j] == 0 && isTraining && dropoutRate > 0) continue;
-                        
-                        weightsInputHidden0[i][j] += learningRate * hidden0Deltas[j] * input[i];
-                    }
-                }
-                
-                for (int j = 0; j < hidden0Size; j++) {
-                    if (hidden0Outputs[j] == 0 && isTraining && dropoutRate > 0) continue;
-                    
-                    biasesHidden0[j] += learningRate * hidden0Deltas[j];
-                }
-            }
-
-            isTraining = false;
-
+            // Trening na rozszerzonym zbiorze danych
+            double totalTrainingError = trainEpoch(augmentedData);
+            
+            // Ocena na zbiorze walidacyjnym
             double trainingError = totalTrainingError / (augmentedData.size() * outputSize);
             double validationError = evaluateError(validationData);
 
+            // Raportowanie postępu
             System.out.printf("Epoka %d/%d, błąd (trening): %.6f, błąd (walidacja): %.6f%n", 
                              epoch + 1, epochs, trainingError, validationError);
 
-            if (validationError < bestValidationError) {
-                bestValidationError = validationError;
-                epochsSinceImprovement = 0;
-                saveModelState();
-            } else {
-                epochsSinceImprovement++;
-            }
-            
-            if (epochsSinceImprovement >= patience) {
-                System.out.println("Wczesne zatrzymanie na epoce " + (epoch + 1) + 
-                                  " (błąd walidacji nie poprawiał się przez " + patience + " epok)");
+            // Sprawdzenie warunku wczesnego zatrzymania
+            if (checkEarlyStopping(validationError, epoch)) {
                 break;
             }
         }
 
+        // Przywrócenie najlepszego modelu i raportowanie zakończenia
         restoreBestModel();
         System.out.println("Uczenie zakończone! Najlepszy błąd walidacji: " + bestValidationError);
     }
     
+    /**
+     * Aktualizuje współczynnik uczenia według harmonogramu
+     * - rozgrzewanie: liniowy wzrost od startLR do peakLR
+     * - po rozgrzaniu: zmniejszenie o 10% co 25 epok
+     */
+    private void updateLearningRate(int epoch, double startLR, double peakLR, int warmupEpochs) {
+        if (epoch < warmupEpochs) {
+            // Liniowe rozgrzewanie
+            learningRate = startLR + (peakLR - startLR) * (epoch / (double)warmupEpochs);
+            System.out.println("Rozgrzewanie: Learning rate zwiększony do: " + learningRate);
+        } else if ((epoch - warmupEpochs) % 25 == 0 && epoch > warmupEpochs) {
+            // Zmniejszenie co 25 epok po rozgrzaniu
+            learningRate *= 0.9;
+            System.out.println("Learning rate zmniejszony do: " + learningRate);
+        }
+    }
+    
+    /**
+     * Tworzy zbiór danych rozszerzony o augmentowane próbki
+     */
+    private List<Sample> createAugmentedData(List<Sample> trainingData, int epoch) {
+        List<Sample> augmentedData = new ArrayList<>();
+        
+        for (Sample s : trainingData) {
+            // Dodaj oryginalną próbkę
+            augmentedData.add(s);
+
+            // Dodaj zmodyfikowane wersje
+            int numAugmentations = ThreadLocalRandom.current().nextInt(3, 6);
+            for (int i = 0; i < numAugmentations; i++) {
+                augmentedData.add(augmentSample(s));
+            }
+        }
+
+        // Wyświetlenie statystyk augmentacji w pierwszej epoce
+        if (epoch == 0) {
+            System.out.println("Liczba próbek augmentowanych: " + augmentedData.size());
+            System.out.println("Stosunek augmentacji: " + String.format("%.1f", 
+                (double)augmentedData.size() / trainingData.size()) + "x");
+        }
+        
+        Collections.shuffle(augmentedData);
+        return augmentedData;
+    }
+    
+    /**
+     * Przeprowadza jedną epokę treningu na wszystkich próbkach
+     */
+    private double trainEpoch(List<Sample> augmentedData) {
+        isTraining = true;
+        double totalError = 0.0;
+        
+        for (Sample sample : augmentedData) {
+            totalError += trainOnSample(sample);
+        }
+        
+        isTraining = false;
+        return totalError;
+    }
+    
+    /**
+     * Trenuje sieć na pojedynczej próbce (jeden krok propagacji wstecznej)
+     */
+    private double trainOnSample(Sample sample) {
+        double[] input = sample.getInput();
+        double[] target = sample.getTarget();
+        
+        // Przejście w przód
+        double[][] layerOutputs = forwardPass(input);
+        
+        int numLayers = layerSizes.length;
+        
+        // Błąd warstwy wyjściowej i delty
+        double[][] deltas = new double[numLayers - 1][];
+        double totalError = 0.0;
+        
+        // Oblicz błąd dla warstwy wyjściowej
+        deltas[numLayers - 2] = new double[outputSize];
+        for (int n = 0; n < outputSize; n++) {
+            double error = target[n] - layerOutputs[numLayers - 1][n];
+            totalError += Math.pow(error, 2);
+            deltas[numLayers - 2][n] = error; // Dla warstwy wyjściowej delta = błąd
+        }
+        
+        // Propagacja wsteczna przez warstwy ukryte
+        for (int layer = numLayers - 3; layer >= 0; layer--) {
+            int currentLayerSize = layerSizes[layer + 1];
+            int nextLayerSize = layerSizes[layer + 2];
+            
+            deltas[layer] = new double[currentLayerSize];
+            
+            // Oblicz delty dla bieżącej warstwy
+            for (int j = 0; j < currentLayerSize; j++) {
+                // Pomijaj neurony wyłączone przez dropout
+                if (layerOutputs[layer + 1][j] == 0 && isTraining && dropoutRate > 0) {
+                    continue;
+                }
+                
+                // Oblicz błąd z następnej warstwy
+                double error = 0.0;
+                for (int k = 0; k < nextLayerSize; k++) {
+                    error += deltas[layer + 1][k] * weights[layer + 1][j][k];
+                }
+                
+                // Oblicz deltę z pochodną sigmoidu
+                double output = layerOutputs[layer + 1][j];
+                deltas[layer][j] = error * output * (1 - output);
+                
+                // Skaluj deltę dla dropout
+                if (isTraining && dropoutRate > 0) {
+                    deltas[layer][j] *= (1.0 - dropoutRate);
+                }
+            }
+        }
+        
+        // Aktualizacja wag i biasów
+        for (int layer = 0; layer < numLayers - 1; layer++) {
+            int fromSize = layerSizes[layer];
+            int toSize = layerSizes[layer + 1];
+            
+            // Aktualizacja wag i biasów dla każdego neuronu w tej warstwie
+            for (int to = 0; to < toSize; to++) {
+                // Pomijaj aktualizacje dla neuronów wyłączonych przez dropout
+                if (layer < numLayers - 2 && // Nie warstwa wyjściowa
+                    layerOutputs[layer + 1][to] == 0 && 
+                    isTraining && dropoutRate > 0) {
+                    continue;
+                }
+                
+                // Aktualizacja biasu
+                biases[layer][to] += learningRate * deltas[layer][to];
+                
+                // Aktualizacja wag
+                for (int from = 0; from < fromSize; from++) {
+                    weights[layer][from][to] += learningRate * deltas[layer][to] * layerOutputs[layer][from];
+                }
+            }
+        }
+        
+        return totalError;
+    }
+    
+    /**
+     * Sprawdza warunek wczesnego zatrzymania i zapisuje model, jeśli jest lepszy
+     * Zwraca true, jeśli trening powinien zostać zatrzymany
+     */
+    private boolean checkEarlyStopping(double validationError, int epoch) {
+        if (validationError < bestValidationError) {
+            bestValidationError = validationError;
+            epochsSinceImprovement = 0;
+            saveModelState();
+            return false;
+        } else {
+            epochsSinceImprovement++;
+            
+            if (epochsSinceImprovement >= patience) {
+                System.out.println("Wczesne zatrzymanie na epoce " + (epoch + 1) + 
+                                  " (błąd walidacji nie poprawiał się przez " + patience + " epok)");
+                return true;
+            }
+            
+            return false;
+        }
+    }
+    
+    /**
+     * Tworzy tekstową reprezentację architektury sieci
+     */
+    private String getArchitectureString() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < layerSizes.length; i++) {
+            sb.append(layerSizes[i]);
+            if (i < layerSizes.length - 1) {
+                sb.append(" → ");
+            }
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Wykonuje predykcję dla podanego wektora wejściowego
+     */
     public double[] predict(double[] input) {
         if (input.length != inputSize) {
             throw new IllegalArgumentException("Nieprawidłowy rozmiar danych wejściowych: " + input.length + 
@@ -818,9 +714,12 @@ public class NeuralNetwork {
         isTraining = false;
         
         double[][] outputs = forwardPass(input);
-        return outputs[4];
+        return outputs[outputs.length - 1];
     }
     
+    /**
+     * Zapisuje model do pliku
+     */
     public void saveModel(String path) throws IOException {
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path))) {
             oos.writeInt(inputSize);
@@ -832,16 +731,17 @@ public class NeuralNetwork {
             oos.writeDouble(learningRate);
             oos.writeDouble(dropoutRate);
 
-            oos.writeObject(weightsInputHidden0);
-            oos.writeObject(biasesHidden0);
-            oos.writeObject(weightsHidden0Hidden1);
-            oos.writeObject(biasesHidden1);
-            oos.writeObject(weightsHidden1Hidden2);
-            oos.writeObject(biasesHidden2);
-            oos.writeObject(weightsHidden2Hidden3);
-            oos.writeObject(biasesHidden3);
-            oos.writeObject(weightsHidden3Output);
-            oos.writeObject(biasesOutput);
+            // Zapis wag i biasów z użyciem oryginalnej struktury dla kompatybilności wstecznej
+            oos.writeObject(weights[0]);
+            oos.writeObject(biases[0]);
+            oos.writeObject(weights[1]);
+            oos.writeObject(biases[1]);
+            oos.writeObject(weights[2]); 
+            oos.writeObject(biases[2]);
+            oos.writeObject(weights[3]);
+            oos.writeObject(biases[3]);
+            oos.writeObject(weights[4]);
+            oos.writeObject(biases[4]);
             
             System.out.println("Model został pomyślnie zapisany do pliku: " + path);
         } catch (IOException e) {
@@ -850,6 +750,9 @@ public class NeuralNetwork {
         }
     }
     
+    /**
+     * Ładuje model z pliku
+     */
     public void loadModel(String path) throws IOException, ClassNotFoundException {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
             this.inputSize = ois.readInt();
@@ -862,21 +765,29 @@ public class NeuralNetwork {
                 this.outputSize = ois.readInt();
                 this.learningRate = ois.readDouble();
                 this.dropoutRate = ois.readDouble();
+                
+                // Aktualizacja rozmiarów warstw
+                this.layerSizes = new int[]{inputSize, hidden0Size, hidden1Size, hidden2Size, hidden3Size, outputSize};
+                
+                // Inicjalizacja tablic
+                int numLayers = layerSizes.length - 1;
+                this.weights = new double[numLayers][][];
+                this.biases = new double[numLayers][];
 
-                this.weightsInputHidden0 = (double[][]) ois.readObject();
-                this.biasesHidden0 = (double[]) ois.readObject();
-                this.weightsHidden0Hidden1 = (double[][]) ois.readObject();
-                this.biasesHidden1 = (double[]) ois.readObject();
-                this.weightsHidden1Hidden2 = (double[][]) ois.readObject();
-                this.biasesHidden2 = (double[]) ois.readObject();
-                this.weightsHidden2Hidden3 = (double[][]) ois.readObject();
-                this.biasesHidden3 = (double[]) ois.readObject();
-                this.weightsHidden3Output = (double[][]) ois.readObject();
-                this.biasesOutput = (double[]) ois.readObject();
+                // Ładowanie wag i biasów
+                weights[0] = (double[][]) ois.readObject();
+                biases[0] = (double[]) ois.readObject();
+                weights[1] = (double[][]) ois.readObject();
+                biases[1] = (double[]) ois.readObject();
+                weights[2] = (double[][]) ois.readObject();
+                biases[2] = (double[]) ois.readObject();
+                weights[3] = (double[][]) ois.readObject();
+                biases[3] = (double[]) ois.readObject();
+                weights[4] = (double[][]) ois.readObject();
+                biases[4] = (double[]) ois.readObject();
                 
                 System.out.println("Model został pomyślnie załadowany z pliku: " + path);
-                System.out.println("Architektura: " + inputSize + " → " + hidden0Size + " → " + 
-                                  hidden1Size + " → " + hidden2Size + " → " + hidden3Size + " → " + outputSize);
+                System.out.println("Architektura: " + getArchitectureString());
             } catch (Exception e) {
                 System.err.println("Format pliku modelu nie odpowiada oczekiwanemu: " + e.getMessage());
                 throw e;

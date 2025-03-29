@@ -121,26 +121,22 @@ public class RecognizerApp extends JFrame {
                 case 2: recognizedLetter = 'N'; break;
             }
 
-            String resultText;
-            if (maxValue >= 0.8) {
-                resultText = String.format(
-                    "Wynik: %c (M:%.2f, O:%.2f, N:%.2f)",
-                    recognizedLetter,
-                    rawOutputs[0],
-                    rawOutputs[1],
-                    rawOutputs[2]
-                );
+            String confidenceLevel;
+            if (maxValue >= 0.95) {
+                confidenceLevel = "Bardzo wysoka pewność";
+            } else if (maxValue >= 0.85) {
+                confidenceLevel = "Wysoka pewność";
+            } else if (maxValue >= 0.75) {
+                confidenceLevel = "Dobra pewność";
+            } else if (maxValue >= 0.6) {
+                confidenceLevel = "Średnia pewność";
+            } else if (maxValue >= 0.45) {
+                confidenceLevel = "Niska pewność";
             } else {
-                resultText = String.format(
-                    "Nie jestem pewien. Najbliżej: %c (M:%.2f, O:%.2f, N:%.2f)",
-                    recognizedLetter,
-                    rawOutputs[0],
-                    rawOutputs[1],
-                    rawOutputs[2]
-                );
+                confidenceLevel = "Bardzo niska pewność";
             }
             
-            resultLabel.setText(resultText);
+            resultLabel.setText(String.format("Rozpoznano literę: %c (%s)", recognizedLetter, confidenceLevel));
             
         } catch (Exception e) {
             resultLabel.setText("Błąd rozpoznawania: " + e.getMessage());

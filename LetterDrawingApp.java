@@ -7,6 +7,9 @@ import java.nio.file.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Aplikacja do tworzenia próbek liter dla treningu sieci neuronowej
+ */
 public class LetterDrawingApp extends JFrame {
     private static final int CANVAS_SIZE = 280;
     private static final int PIXEL_SIZE = 28;
@@ -17,18 +20,18 @@ public class LetterDrawingApp extends JFrame {
     private JLabel statusLabel;
 
     public LetterDrawingApp() {
-        setTitle("Створення зразків літер");
+        setTitle("Tworzenie próbek liter");  // Translated from Ukrainian
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
 
         drawingPanel = new DrawingPanel();
 
-        saveAsM = new JButton("Зберегти як M");
-        saveAsO = new JButton("Зберегти як O");
-        saveAsN = new JButton("Зберегти як N");
-        clearButton = new JButton("Очистити");
+        saveAsM = new JButton("Zapisz jako M");  // Translated
+        saveAsO = new JButton("Zapisz jako O");  // Translated
+        saveAsN = new JButton("Zapisz jako N");  // Translated
+        clearButton = new JButton("Wyczyść");    // Translated
 
-        statusLabel = new JLabel("Готовий до малювання");
+        statusLabel = new JLabel("Gotowy do rysowania"); // Translated
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
         saveAsM.addActionListener(e -> saveLetterImage('M'));
@@ -36,7 +39,7 @@ public class LetterDrawingApp extends JFrame {
         saveAsN.addActionListener(e -> saveLetterImage('N'));
         clearButton.addActionListener(e -> drawingPanel.clear());
 
-        // Використовуємо GridLayout для кращого розташування кнопок
+        // Używamy GridLayout dla lepszego rozmieszczenia przycisków
         JPanel buttonPanel = new JPanel(new GridLayout(2, 2, 5, 5));
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
         buttonPanel.add(saveAsM);
@@ -48,7 +51,7 @@ public class LetterDrawingApp extends JFrame {
         add(buttonPanel, BorderLayout.SOUTH);
         add(statusLabel, BorderLayout.NORTH);
 
-        // Збільшуємо розмір вікна для кращого відображення кнопок
+        // Zwiększamy rozmiar okna dla lepszego wyświetlania przycisków
         setSize(CANVAS_SIZE + 60, CANVAS_SIZE + 130);
         setLocationRelativeTo(null);
         setVisible(true);
@@ -61,9 +64,9 @@ public class LetterDrawingApp extends JFrame {
         if (!Files.exists(dataPath)) {
             try {
                 Files.createDirectory(dataPath);
-                statusLabel.setText("Створено директорію: " + DATA_DIR);
+                statusLabel.setText("Utworzono katalog: " + DATA_DIR); // Translated
             } catch (IOException e) {
-                statusLabel.setText("Помилка створення директорії: " + e.getMessage());
+                statusLabel.setText("Błąd tworzenia katalogu: " + e.getMessage()); // Translated
                 e.printStackTrace();
             }
         }
@@ -75,9 +78,9 @@ public class LetterDrawingApp extends JFrame {
 
         try {
             saveToCSV(imageData, fileName);
-            statusLabel.setText("Збережено як " + fileName);
+            statusLabel.setText("Zapisano jako " + fileName); // Translated
         } catch (IOException e) {
-            statusLabel.setText("Помилка збереження: " + e.getMessage());
+            statusLabel.setText("Błąd zapisywania: " + e.getMessage()); // Translated
             e.printStackTrace();
         }
     }
@@ -159,7 +162,7 @@ public class LetterDrawingApp extends JFrame {
             g2d.fillRect(0, 0, PIXEL_SIZE, PIXEL_SIZE);
             g2d.setColor(Color.WHITE);
             repaint();
-            statusLabel.setText("Полотно очищено");
+            statusLabel.setText("Panel wyczyszczony"); // Translated
         }
 
         public double[] getBinarizedImage() {
