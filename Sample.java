@@ -1,6 +1,6 @@
 public class Sample {
-    private double[] input;  // 784 elements (28x28 pixels)
-    private double[] target; // 3 elements for one-hot encoding [M, O, N]
+    private double[] input;
+    private double[] target;
 
     public Sample(double[] input, double[] target) {
         this.input = input;

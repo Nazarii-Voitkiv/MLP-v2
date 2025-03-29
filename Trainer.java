@@ -1,6 +1,8 @@
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Trainer {
     
@@ -8,22 +10,18 @@ public class Trainer {
     
     public static void main(String[] args) {
         System.out.println("Запуск тренування нейромережі для розпізнавання літер M, O, N");
-        
-        // 1. Завантаження зразків з MyDataLoader
+
         System.out.println("Завантаження зразків...");
         List<Sample> samples = MyDataLoader.loadSamples();
-        
-        // 2. Перевірка наявності зразків
+
         if (samples.isEmpty()) {
             System.err.println("Помилка: немає зразків для тренування. Перевірте папку data/");
             return;
         }
-        
-        // 3. Створення нової нейромережі
+
         System.out.println("Створення нейромережі...");
         NeuralNetwork net = new NeuralNetwork();
-        
-        // 4-5. Перевірка наявності збереженої моделі або тренування нової
+
         File modelFile = new File(MODEL_PATH);
         
         if (modelFile.exists()) {
@@ -39,22 +37,18 @@ public class Trainer {
             System.out.println("Збережену модель не знайдено. Початок навчання нової моделі...");
             trainNewModel(net, samples);
         }
-        
-        // 6. Обчислення точності на всій вибірці
+
         calculateAndPrintAccuracy(net, samples);
     }
     
     private static void trainNewModel(NeuralNetwork net, List<Sample> samples) {
-        // Налаштування параметрів
-        net.setDropoutRate(0.1);
+        net.setDropoutRate(0.0);
         net.setPatience(10);
         net.setValidationSplit(0.2);
-        
-        // Тренування мережі (50 епох)
+
         System.out.println("Тренування нейромережі (50 епох)...");
         net.train(samples, 200);
-        
-        // Збереження моделі
+
         try {
             System.out.println("Збереження моделі...");
             net.saveModel(MODEL_PATH);
@@ -68,35 +62,87 @@ public class Trainer {
         
         int correctPredictions = 0;
         int totalSamples = samples.size();
+
+        int[][] confusionMatrix = new int[3][3];
+
+        String[] classNames = {"M", "O", "N"};
+
+        int[] classCount = new int[3];
         
         for (Sample sample : samples) {
-            // Отримуємо прогноз
             double[] prediction = net.predict(sample.getInput());
-            
-            // Знаходимо індекс найбільшого значення (передбачений клас)
+
             int predictedIndex = findMaxIndex(prediction);
-            
-            // Знаходимо індекс найбільшого значення у цілі (правильний клас)
+
             int targetIndex = findMaxIndex(sample.getTarget());
-            
-            // Порівнюємо та рахуємо правильні передбачення
+
+            classCount[targetIndex]++;
+
+            confusionMatrix[targetIndex][predictedIndex]++;
+
             if (predictedIndex == targetIndex) {
                 correctPredictions++;
             }
         }
-        
-        // Обчислюємо та виводимо точність
+
         double accuracy = (double) correctPredictions / totalSamples * 100;
         System.out.printf("Точність: %.2f%% (%d/%d правильних прогнозів)%n", 
                          accuracy, correctPredictions, totalSamples);
-        
-        // Виводимо інформацію про класи
+
         System.out.println("Інформація про класи: 0 = M, 1 = O, 2 = N");
+
+        System.out.println("\nТочність по класах:");
+        for (int i = 0; i < 3; i++) {
+            double classAccuracy = (double) confusionMatrix[i][i] / classCount[i] * 100;
+            System.out.printf("%s: %.2f%% (%d/%d)%n", 
+                            classNames[i], classAccuracy, confusionMatrix[i][i], classCount[i]);
+        }
+
+        System.out.println("\nМатриця плутанини:");
+        System.out.println("       | Predicted |");
+        System.out.println("       |  M  |  O  |  N  |");
+        System.out.println("-------|-----|-----|-----|");
+        
+        for (int i = 0; i < 3; i++) {
+            System.out.printf("Actual %s | %3d | %3d | %3d |%n", 
+                            classNames[i], confusionMatrix[i][0], confusionMatrix[i][1], confusionMatrix[i][2]);
+        }
+
+        System.out.println("\nНайбільш плутані пари класів:");
+        Map<String, Integer> confusionPairs = new HashMap<>();
+        
+        for (int actual = 0; actual < 3; actual++) {
+            for (int predicted = 0; predicted < 3; predicted++) {
+                if (actual != predicted && confusionMatrix[actual][predicted] > 0) {
+                    String pair = classNames[actual] + " → " + classNames[predicted];
+                    confusionPairs.put(pair, confusionMatrix[actual][predicted]);
+                }
+            }
+        }
+
+        confusionPairs.entrySet().stream()
+            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+            .forEach(entry -> System.out.printf("%s: %d випадків%n", entry.getKey(), entry.getValue()));
+
+        System.out.println("\nРекомендації щодо аугментації даних:");
+        int[] misclassified = new int[3];
+        
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                if (i != j) {
+                    misclassified[i] += confusionMatrix[i][j];
+                }
+            }
+        }
+        
+        for (int i = 0; i < 3; i++) {
+            if (misclassified[i] > 0) {
+                System.out.printf("- Літера %s: додати більше прикладів та варіацій (неправильно класифіковано: %d)%n", 
+                                classNames[i], misclassified[i]);
+            }
+        }
     }
     
-    /**
-     * Знаходить індекс елемента з максимальним значенням у масиві
-     */
     private static int findMaxIndex(double[] array) {
         int maxIndex = 0;
         double maxValue = array[0];

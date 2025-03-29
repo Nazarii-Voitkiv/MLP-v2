@@ -26,7 +26,6 @@ public class MyDataLoader {
         
         for (File file : files) {
             try {
-                // Визначаємо літеру з назви файлу
                 Matcher matcher = pattern.matcher(file.getName());
                 if (!matcher.matches()) {
                     System.out.println("Пропускаємо файл з неправильним форматом імені: " + file.getName());
@@ -34,23 +33,19 @@ public class MyDataLoader {
                 }
                 
                 char letter = matcher.group(1).charAt(0);
-                
-                // Створюємо цільовий масив відповідно до літери
+
                 double[] target = createTargetArray(letter);
-                
-                // Зчитуємо вміст CSV файлу
+
                 String content = new String(Files.readAllBytes(file.toPath()));
                 double[] input = parseCSVContent(content);
-                
-                // Перевіряємо розмір масиву вхідних даних
+
                 if (input.length != 784) {
                     System.out.println("Попередження: " + file.getName() + 
                                        " містить " + input.length + 
                                        " елементів замість 784. Пропускаємо файл.");
                     continue;
                 }
-                
-                // Додаємо зразок до списку
+
                 samples.add(new Sample(input, target));
                 
             } catch (IOException e) {
@@ -63,17 +58,17 @@ public class MyDataLoader {
     }
     
     private static double[] createTargetArray(char letter) {
-        double[] target = new double[3]; // [M, O, N]
+        double[] target = new double[3];
         
         switch (letter) {
             case 'M':
-                target[0] = 1.0; // [1, 0, 0]
+                target[0] = 1.0;
                 break;
             case 'O':
-                target[1] = 1.0; // [0, 1, 0]
+                target[1] = 1.0;
                 break;
             case 'N':
-                target[2] = 1.0; // [0, 0, 1]
+                target[2] = 1.0;
                 break;
         }
         
