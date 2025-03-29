@@ -4,23 +4,22 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class NeuralNetwork {
     private int inputSize;
-    private int hidden0Size; // First hidden layer (512 neurons)
-    private int hidden1Size; // Second hidden layer (256 neurons)
-    private int hidden2Size; // Third hidden layer (128 neurons)
-    private int hidden3Size; // Fourth hidden layer (64 neurons)
+    private int hidden0Size;
+    private int hidden1Size;
+    private int hidden2Size;
+    private int hidden3Size;
     private int outputSize;
     
-    // Weights and biases for deeper architecture
-    private double[][] weightsInputHidden0;    // 784x512
-    private double[] biasesHidden0;            // 512
-    private double[][] weightsHidden0Hidden1;  // 512x256
-    private double[] biasesHidden1;            // 256
-    private double[][] weightsHidden1Hidden2;  // 256x128
-    private double[] biasesHidden2;            // 128
-    private double[][] weightsHidden2Hidden3;  // 128x64
-    private double[] biasesHidden3;            // 64
-    private double[][] weightsHidden3Output;   // 64x3
-    private double[] biasesOutput;             // 3
+    private double[][] weightsInputHidden0;  
+    private double[] biasesHidden0;
+    private double[][] weightsHidden0Hidden1;
+    private double[] biasesHidden1;
+    private double[][] weightsHidden1Hidden2;
+    private double[] biasesHidden2;
+    private double[][] weightsHidden2Hidden3;
+    private double[] biasesHidden3;
+    private double[][] weightsHidden3Output;
+    private double[] biasesOutput;
 
     private double learningRate;
 
@@ -233,7 +232,6 @@ public class NeuralNetwork {
             }
         }
         
-        // Return all layer outputs
         return new double[][] { hidden0Outputs, hidden1Outputs, hidden2Outputs, hidden3Outputs, outputInputs };
     }
     
@@ -539,7 +537,7 @@ public class NeuralNetwork {
     public void train(List<Sample> samples, int epochs) {
         int totalSamples = samples.size();
         if (totalSamples == 0) {
-            System.err.println("Немає даних для навчання!");
+            System.err.println("Brak danych do uczenia!");
             return;
         }
 
@@ -549,13 +547,13 @@ public class NeuralNetwork {
 
         learningRate = startLR;
         
-        System.out.println("Початок навчання нейромережі...");
-        System.out.println("Архітектура: " + inputSize + " → " + hidden0Size + " → " + 
+        System.out.println("Rozpoczęcie uczenia sieci neuronowej...");
+        System.out.println("Architektura: " + inputSize + " → " + hidden0Size + " → " + 
                            hidden1Size + " → " + hidden2Size + " → " + hidden3Size + " → " + outputSize);
-        System.out.println("Кількість епох: " + epochs);
-        System.out.println("Розмір навчальної вибірки: " + totalSamples);
+        System.out.println("Liczba epok: " + epochs);
+        System.out.println("Rozmiar zbioru uczącego: " + totalSamples);
         System.out.println("Learning rate: początkowy=" + startLR + ", maksymalny=" + peakLR);
-        System.out.println("Warmup: " + warmupEpochs + " епох");
+        System.out.println("Rozgrzewanie: " + warmupEpochs + " epok");
         System.out.println("Dropout rate: " + dropoutRate);
 
         Collections.shuffle(samples);
@@ -565,8 +563,8 @@ public class NeuralNetwork {
         List<Sample> trainingData = new ArrayList<>(samples.subList(0, trainingSize));
         List<Sample> validationData = new ArrayList<>(samples.subList(trainingSize, totalSamples));
         
-        System.out.println("Розмір тренувальної вибірки: " + trainingData.size());
-        System.out.println("Розмір валідаційної вибірки: " + validationData.size());
+        System.out.println("Rozmiar zbioru treningowego: " + trainingData.size());
+        System.out.println("Rozmiar zbioru walidacyjnego: " + validationData.size());
 
         bestValidationError = Double.MAX_VALUE;
         epochsSinceImprovement = 0;
@@ -574,10 +572,10 @@ public class NeuralNetwork {
         for (int epoch = 0; epoch < epochs; epoch++) {
             if (epoch < warmupEpochs) {
                 learningRate = startLR + (peakLR - startLR) * (epoch / (double)warmupEpochs);
-                System.out.println("Warmup: Learning rate increased to: " + learningRate);
+                System.out.println("Rozgrzewanie: Learning rate zwiększony do: " + learningRate);
             } else if ((epoch - warmupEpochs) % 25 == 0 && epoch > warmupEpochs) {
                 learningRate *= 0.9;
-                System.out.println("Learning rate decreased to: " + learningRate);
+                System.out.println("Learning rate zmniejszony do: " + learningRate);
             }
 
             List<Sample> augmentedData = new ArrayList<>();
@@ -591,8 +589,8 @@ public class NeuralNetwork {
             }
 
             if (epoch == 0) {
-                System.out.println("Аугментованих прикладів: " + augmentedData.size());
-                System.out.println("Співвідношення аугментації: " + String.format("%.1f", 
+                System.out.println("Liczba próbek augmentowanych: " + augmentedData.size());
+                System.out.println("Stosunek augmentacji: " + String.format("%.1f", 
                     (double)augmentedData.size() / trainingData.size()) + "x");
             }
             
@@ -789,7 +787,7 @@ public class NeuralNetwork {
             double trainingError = totalTrainingError / (augmentedData.size() * outputSize);
             double validationError = evaluateError(validationData);
 
-            System.out.printf("Епоха %d/%d, помилка (тренування): %.6f, помилка (валідація): %.6f%n", 
+            System.out.printf("Epoka %d/%d, błąd (trening): %.6f, błąd (walidacja): %.6f%n", 
                              epoch + 1, epochs, trainingError, validationError);
 
             if (validationError < bestValidationError) {
@@ -801,20 +799,20 @@ public class NeuralNetwork {
             }
             
             if (epochsSinceImprovement >= patience) {
-                System.out.println("Early stopping на епосі " + (epoch + 1) + 
-                                  " (валідаційна помилка не покращувалась " + patience + " епох)");
+                System.out.println("Wczesne zatrzymanie na epoce " + (epoch + 1) + 
+                                  " (błąd walidacji nie poprawiał się przez " + patience + " epok)");
                 break;
             }
         }
 
         restoreBestModel();
-        System.out.println("Навчання завершено! Найкраща валідаційна помилка: " + bestValidationError);
+        System.out.println("Uczenie zakończone! Najlepszy błąd walidacji: " + bestValidationError);
     }
     
     public double[] predict(double[] input) {
         if (input.length != inputSize) {
-            throw new IllegalArgumentException("Неправильний розмір вхідних даних: " + input.length + 
-                                              " (очікувалося " + inputSize + ")");
+            throw new IllegalArgumentException("Nieprawidłowy rozmiar danych wejściowych: " + input.length + 
+                                              " (oczekiwano " + inputSize + ")");
         }
 
         isTraining = false;
@@ -845,9 +843,9 @@ public class NeuralNetwork {
             oos.writeObject(weightsHidden3Output);
             oos.writeObject(biasesOutput);
             
-            System.out.println("Модель успішно збережено у файл: " + path);
+            System.out.println("Model został pomyślnie zapisany do pliku: " + path);
         } catch (IOException e) {
-            System.err.println("Помилка при збереженні моделі: " + e.getMessage());
+            System.err.println("Błąd podczas zapisywania modelu: " + e.getMessage());
             throw e;
         }
     }
@@ -876,15 +874,15 @@ public class NeuralNetwork {
                 this.weightsHidden3Output = (double[][]) ois.readObject();
                 this.biasesOutput = (double[]) ois.readObject();
                 
-                System.out.println("Модель успішно завантажено з файлу: " + path);
-                System.out.println("Архітектура: " + inputSize + " → " + hidden0Size + " → " + 
+                System.out.println("Model został pomyślnie załadowany z pliku: " + path);
+                System.out.println("Architektura: " + inputSize + " → " + hidden0Size + " → " + 
                                   hidden1Size + " → " + hidden2Size + " → " + hidden3Size + " → " + outputSize);
             } catch (Exception e) {
-                System.err.println("Формат файлу моделі не відповідає очікуваному: " + e.getMessage());
+                System.err.println("Format pliku modelu nie odpowiada oczekiwanemu: " + e.getMessage());
                 throw e;
             }
         } catch (IOException | ClassNotFoundException e) {
-            System.err.println("Помилка при завантаженні моделі: " + e.getMessage());
+            System.err.println("Błąd podczas ładowania modelu: " + e.getMessage());
             throw e;
         }
     }
