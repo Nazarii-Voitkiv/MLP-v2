@@ -19,7 +19,7 @@ public class RecognizerApp extends JFrame {
     private NeuralNetwork neuralNetwork;
 
     public RecognizerApp() {
-        setTitle("Розпізнавання літер");
+        setTitle("Rozpoznawanie liter");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
 
@@ -33,7 +33,7 @@ public class RecognizerApp extends JFrame {
         centeringPanel.add(drawingPanel);
         centeringPanel.setBackground(Color.DARK_GRAY);
 
-        resultLabel = new JLabel("Намалюйте літеру (M, O або N)");
+        resultLabel = new JLabel("Narysuj literę (M, O lub N)");
         resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
         resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 18));
         resultLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -43,9 +43,9 @@ public class RecognizerApp extends JFrame {
 
         JPanel topButtonPanel = new JPanel(new GridLayout(1, 2, 10, 0));
         
-        recognizeButton = new JButton("Розпізнати");
-        clearButton = new JButton("Очистити");
-        wrongLetterButton = new JButton("❌ Це не та літера");
+        recognizeButton = new JButton("Rozpoznaj");
+        clearButton = new JButton("Wyczyść");
+        wrongLetterButton = new JButton("❌ To nie ta litera");
 
         configureButton(recognizeButton);
         configureButton(clearButton);
@@ -68,7 +68,8 @@ public class RecognizerApp extends JFrame {
         add(centeringPanel, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
 
-        setSize(CANVAS_SIZE + 120, CANVAS_SIZE + 220);
+        // Increased window height by 50 pixels
+        setSize(CANVAS_SIZE + 120, CANVAS_SIZE + 270);
         setLocationRelativeTo(null);
         setVisible(true);
     }
@@ -82,19 +83,19 @@ public class RecognizerApp extends JFrame {
         try {
             neuralNetwork = new NeuralNetwork();
             neuralNetwork.loadModel(MODEL_PATH);
-            System.out.println("Модель успішно завантажено");
+            System.out.println("Model został pomyślnie załadowany");
         } catch (IOException | ClassNotFoundException e) {
             JOptionPane.showMessageDialog(this, 
-                "Помилка завантаження моделі: " + e.getMessage(), 
-                "Помилка", JOptionPane.ERROR_MESSAGE);
-            System.err.println("Помилка завантаження моделі: " + e.getMessage());
+                "Błąd ładowania modelu: " + e.getMessage(), 
+                "Błąd", JOptionPane.ERROR_MESSAGE);
+            System.err.println("Błąd ładowania modelu: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
     private void recognizeDrawing() {
         if (neuralNetwork == null) {
-            resultLabel.setText("Помилка: модель не завантажена");
+            resultLabel.setText("Błąd: model nie jest załadowany");
             return;
         }
 
@@ -123,7 +124,7 @@ public class RecognizerApp extends JFrame {
             String resultText;
             if (maxValue >= 0.8) {
                 resultText = String.format(
-                    "Результат: %c (M:%.2f, O:%.2f, N:%.2f)",
+                    "Wynik: %c (M:%.2f, O:%.2f, N:%.2f)",
                     recognizedLetter,
                     rawOutputs[0],
                     rawOutputs[1],
@@ -131,7 +132,7 @@ public class RecognizerApp extends JFrame {
                 );
             } else {
                 resultText = String.format(
-                    "Не впевнений. Найближче: %c (M:%.2f, O:%.2f, N:%.2f)",
+                    "Nie jestem pewien. Najbliżej: %c (M:%.2f, O:%.2f, N:%.2f)",
                     recognizedLetter,
                     rawOutputs[0],
                     rawOutputs[1],
@@ -142,7 +143,7 @@ public class RecognizerApp extends JFrame {
             resultLabel.setText(resultText);
             
         } catch (Exception e) {
-            resultLabel.setText("Помилка розпізнавання: " + e.getMessage());
+            resultLabel.setText("Błąd rozpoznawania: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -159,16 +160,16 @@ public class RecognizerApp extends JFrame {
         
         if (!hasDrawing) {
             JOptionPane.showMessageDialog(this, 
-                "Немає що зберігати. Спочатку намалюйте літеру.", 
-                "Помилка", JOptionPane.WARNING_MESSAGE);
+                "Nie ma nic do zapisania. Najpierw narysuj literę.", 
+                "Błąd", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         Object[] options = { "M", "O", "N" };
 
         int choice = JOptionPane.showOptionDialog(this,
-            "Яка це була літера?",
-            "Виберіть правильний варіант",
+            "Jaka to była litera?",
+            "Wybierz właściwą opcję",
             JOptionPane.DEFAULT_OPTION,
             JOptionPane.QUESTION_MESSAGE,
             null,
@@ -193,15 +194,15 @@ public class RecognizerApp extends JFrame {
             saveToCSV(imageData, fileName);
 
             JOptionPane.showMessageDialog(this,
-                "✅ Збережено приклад як " + fileName,
-                "Успіх",
+                "✅ Zapisano przykład jako " + fileName,
+                "Sukces",
                 JOptionPane.INFORMATION_MESSAGE);
                 
-            resultLabel.setText("Збережено як " + fileName);
+            resultLabel.setText("Zapisano jako " + fileName);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
-                "Помилка при збереженні: " + e.getMessage(),
-                "Помилка",
+                "Błąd podczas zapisywania: " + e.getMessage(),
+                "Błąd",
                 JOptionPane.ERROR_MESSAGE);
             e.printStackTrace();
         }
@@ -291,7 +292,7 @@ public class RecognizerApp extends JFrame {
             g2d.fillRect(0, 0, PIXEL_SIZE, PIXEL_SIZE);
             g2d.setColor(Color.WHITE);
             repaint();
-            resultLabel.setText("Панель очищено. Намалюйте нову літеру.");
+            resultLabel.setText("Panel wyczyszczony. Narysuj nową literę.");
         }
 
         public double[] getBinarizedImage() {
