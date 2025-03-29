@@ -31,7 +31,6 @@ public class Trainer {
     }
     
     private static void trainNewModel(NeuralNetwork net, List<Sample> samples) {
-        net.setDropoutRate(0.0);
         net.setPatience(10);
         net.setValidationSplit(0.2);
         net.train(samples, 200);
@@ -62,7 +61,7 @@ public class Trainer {
                          accuracy, correctPredictions, totalSamples);
     }
     
-    private static int findMaxIndex(double[] array) {
+     private static int findMaxIndex(double[] array) {
         int maxIndex = 0;
         double maxValue = array[0];
         

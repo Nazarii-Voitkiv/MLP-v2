@@ -23,7 +23,7 @@ public class NeuralNetwork {
 
     private double learningRate;
 
-    private double dropoutRate = 0.1;
+    private double dropoutRate = 0.0;
     private boolean isTraining = false;
 
     private int patience = 10;
