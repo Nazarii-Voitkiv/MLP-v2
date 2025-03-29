@@ -11,14 +11,14 @@ public class MyDataLoader {
         File dataDir = new File(DATA_DIR);
         
         if (!dataDir.exists() || !dataDir.isDirectory()) {
-            System.err.println("Помилка: директорія " + DATA_DIR + " не існує");
+            System.err.println("Błąd: katalog " + DATA_DIR + " nie istnieje");
             return samples;
         }
         
         File[] files = dataDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
         
         if (files == null || files.length == 0) {
-            System.out.println("Не знайдено CSV файлів в директорії " + DATA_DIR);
+            System.out.println("Nie znaleziono plików CSV w katalogu " + DATA_DIR);
             return samples;
         }
         
@@ -28,7 +28,7 @@ public class MyDataLoader {
             try {
                 Matcher matcher = pattern.matcher(file.getName());
                 if (!matcher.matches()) {
-                    System.out.println("Пропускаємо файл з неправильним форматом імені: " + file.getName());
+                    System.out.println("Pomijamy plik z nieprawidłowym formatem nazwy: " + file.getName());
                     continue;
                 }
                 
@@ -40,20 +40,20 @@ public class MyDataLoader {
                 double[] input = parseCSVContent(content);
 
                 if (input.length != 784) {
-                    System.out.println("Попередження: " + file.getName() + 
-                                       " містить " + input.length + 
-                                       " елементів замість 784. Пропускаємо файл.");
+                    System.out.println("Ostrzeżenie: " + file.getName() + 
+                                       " zawiera " + input.length + 
+                                       " elementów zamiast 784. Pomijamy plik.");
                     continue;
                 }
 
                 samples.add(new Sample(input, target));
                 
             } catch (IOException e) {
-                System.err.println("Помилка при читанні файлу " + file.getName() + ": " + e.getMessage());
+                System.err.println("Błąd odczytu pliku " + file.getName() + ": " + e.getMessage());
             }
         }
         
-        System.out.println("Завантажено " + samples.size() + " зразків з директорії " + DATA_DIR);
+        System.out.println("Załadowano " + samples.size() + " próbek z katalogu " + DATA_DIR);
         return samples;
     }
     
@@ -83,7 +83,7 @@ public class MyDataLoader {
             try {
                 result[i] = Double.parseDouble(values[i]);
             } catch (NumberFormatException e) {
-                System.err.println("Некоректний формат числа: " + values[i] + ". Використовуємо 0.0");
+                System.err.println("Nieprawidłowy format liczby: " + values[i] + ". Używamy 0.0");
                 result[i] = 0.0;
             }
         }
