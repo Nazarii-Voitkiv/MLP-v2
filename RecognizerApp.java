@@ -18,31 +18,48 @@ public class RecognizerApp extends JFrame {
     private JButton recognizeButton, clearButton, wrongLetterButton;
     private NeuralNetwork neuralNetwork;
 
+    public static void main(String[] args) {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        File modelFile = new File(MODEL_PATH);
+        if (!modelFile.exists()) {
+            JOptionPane.showMessageDialog(null,
+                "Błąd: Nie znaleziono pliku modelu '" + MODEL_PATH + "'.\n\n" +
+                "Uruchom najpierw program Trainer, aby wytrenować i zapisać model.",
+                "Brak pliku modelu",
+                JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+            return;
+        }
+        
+        SwingUtilities.invokeLater(RecognizerApp::new);
+    }
+
     public RecognizerApp() {
         setTitle("Rozpoznawanie liter");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new BorderLayout(10, 10));
 
-        ((JComponent) getContentPane()).setBorder(new EmptyBorder(10, 10, 10, 10));
+        setLayout(null);
 
-        loadNeuralNetwork();
+        if (!loadNeuralNetwork()) {
+            dispose();
+            return;
+        }
 
         drawingPanel = new DrawingPanel();
+        drawingPanel.setBounds(20, 20, CANVAS_SIZE, CANVAS_SIZE);
+        add(drawingPanel);
 
-        JPanel centeringPanel = new JPanel(new GridBagLayout());
-        centeringPanel.add(drawingPanel);
-        centeringPanel.setBackground(Color.DARK_GRAY);
-
-        resultLabel = new JLabel("Narysuj literę (M, O lub N)");
+        resultLabel = new JLabel("<html>Narysuj literę (M, O lub N)</html>");
         resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
         resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 18));
-        resultLabel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        resultLabel.setBounds(CANVAS_SIZE + 40, 20, 250, 80);
+        add(resultLabel);
 
-        JPanel buttonPanel = new JPanel(new BorderLayout(10, 10));
-        buttonPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
-
-        JPanel topButtonPanel = new JPanel(new GridLayout(1, 2, 10, 0));
-        
         recognizeButton = new JButton("Rozpoznaj");
         clearButton = new JButton("Wyczyść");
         wrongLetterButton = new JButton("❌ To nie ta litera");
@@ -51,26 +68,21 @@ public class RecognizerApp extends JFrame {
         configureButton(clearButton);
         configureButton(wrongLetterButton);
 
+        recognizeButton.setBounds(CANVAS_SIZE + 40, CANVAS_SIZE - 180, 250, 50);
+        clearButton.setBounds(CANVAS_SIZE + 40, CANVAS_SIZE - 120, 250, 50);
+        wrongLetterButton.setBounds(CANVAS_SIZE + 40, CANVAS_SIZE - 60, 250, 50);
+
         recognizeButton.addActionListener(e -> recognizeDrawing());
         clearButton.addActionListener(e -> drawingPanel.clear());
         wrongLetterButton.addActionListener(e -> handleWrongLetter());
 
-        topButtonPanel.add(recognizeButton);
-        topButtonPanel.add(clearButton);
+        add(recognizeButton);
+        add(clearButton);
+        add(wrongLetterButton);
 
-        JPanel bottomButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        bottomButtonPanel.add(wrongLetterButton);
-
-        buttonPanel.add(topButtonPanel, BorderLayout.NORTH);
-        buttonPanel.add(bottomButtonPanel, BorderLayout.SOUTH);
-
-        add(resultLabel, BorderLayout.NORTH);
-        add(centeringPanel, BorderLayout.CENTER);
-        add(buttonPanel, BorderLayout.SOUTH);
-
-        // Increased window height by 50 pixels
-        setSize(CANVAS_SIZE + 120, CANVAS_SIZE + 270);
+        setSize(CANVAS_SIZE + 320, CANVAS_SIZE + 80);
         setLocationRelativeTo(null);
+        setResizable(false);
         setVisible(true);
     }
     
@@ -79,17 +91,20 @@ public class RecognizerApp extends JFrame {
         button.setMargin(new Insets(10, 10, 10, 10));
     }
     
-    private void loadNeuralNetwork() {
+    private boolean loadNeuralNetwork() {
         try {
             neuralNetwork = new NeuralNetwork();
             neuralNetwork.loadModel(MODEL_PATH);
             System.out.println("Model został pomyślnie załadowany");
+            return true;
         } catch (IOException | ClassNotFoundException e) {
             JOptionPane.showMessageDialog(this, 
-                "Błąd ładowania modelu: " + e.getMessage(), 
-                "Błąd", JOptionPane.ERROR_MESSAGE);
+                "Błąd ładowania modelu: " + e.getMessage() + 
+                "\n\nAplikacja zostanie zamknięta.", 
+                "Błąd krytyczny", JOptionPane.ERROR_MESSAGE);
             System.err.println("Błąd ładowania modelu: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
     }
 
@@ -136,7 +151,8 @@ public class RecognizerApp extends JFrame {
                 confidenceLevel = "Bardzo niska pewność";
             }
             
-            resultLabel.setText(String.format("Rozpoznano literę: %c (%s)", recognizedLetter, confidenceLevel));
+            resultLabel.setText(String.format("<html>Rozpoznano literę:<br><b>%c</b> (%s)</html>", 
+                               recognizedLetter, confidenceLevel));
             
         } catch (Exception e) {
             resultLabel.setText("Błąd rozpoznawania: " + e.getMessage());
@@ -247,6 +263,7 @@ public class RecognizerApp extends JFrame {
     }
 
     private class DrawingPanel extends JPanel {
+        private static final int INTERNAL_PIXEL_SIZE = 56;
         private BufferedImage image;
         private Graphics2D g2d;
 
@@ -254,41 +271,76 @@ public class RecognizerApp extends JFrame {
             setPreferredSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
             setMinimumSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
             setMaximumSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
-            setBackground(Color.BLACK);
+            setBackground(Color.WHITE);
             setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
 
-            image = new BufferedImage(PIXEL_SIZE, PIXEL_SIZE, BufferedImage.TYPE_BYTE_GRAY);
+            image = new BufferedImage(INTERNAL_PIXEL_SIZE, INTERNAL_PIXEL_SIZE, BufferedImage.TYPE_BYTE_GRAY);
             g2d = image.createGraphics();
-            g2d.setColor(Color.BLACK);
-            g2d.fillRect(0, 0, PIXEL_SIZE, PIXEL_SIZE);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setColor(Color.WHITE);
+            g2d.fillRect(0, 0, INTERNAL_PIXEL_SIZE, INTERNAL_PIXEL_SIZE);
+            g2d.setColor(Color.BLACK);
 
             MouseAdapter mouseHandler = new MouseAdapter() {
-                @Override public void mousePressed(MouseEvent e) { draw(e.getX(), e.getY()); }
-                @Override public void mouseDragged(MouseEvent e) { draw(e.getX(), e.getY()); }
+                private int lastX = -1;
+                private int lastY = -1;
+                
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    lastX = e.getX();
+                    lastY = e.getY();
+                    drawPoint(lastX, lastY);
+                }
+                
+                @Override
+                public void mouseDragged(MouseEvent e) {
+                    int x = e.getX();
+                    int y = e.getY();
+                    
+                    if (lastX != -1 && lastY != -1) {
+                        drawLine(lastX, lastY, x, y);
+                    }
+                    
+                    lastX = x;
+                    lastY = y;
+                }
+                
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    lastX = -1;
+                    lastY = -1;
+                }
             };
 
             addMouseListener(mouseHandler);
             addMouseMotionListener(mouseHandler);
         }
 
-        private void draw(int x, int y) {
-            int pixelX = x * PIXEL_SIZE / CANVAS_SIZE;
-            int pixelY = y * PIXEL_SIZE / CANVAS_SIZE;
+        private void drawPoint(int x, int y) {
+            int pixelX = x * INTERNAL_PIXEL_SIZE / CANVAS_SIZE;
+            int pixelY = y * INTERNAL_PIXEL_SIZE / CANVAS_SIZE;
 
-            g2d.fillRect(Math.max(0, pixelX - 1), Math.max(0, pixelY - 1),
-                    Math.min(3, PIXEL_SIZE - pixelX + 1),
-                    Math.min(3, PIXEL_SIZE - pixelY + 1));
+            g2d.fillOval(pixelX - 2, pixelY - 2, 5, 5);
+            repaint();
+        }
+        
+        private void drawLine(int x1, int y1, int x2, int y2) {
+            int pixelX1 = x1 * INTERNAL_PIXEL_SIZE / CANVAS_SIZE;
+            int pixelY1 = y1 * INTERNAL_PIXEL_SIZE / CANVAS_SIZE;
+            int pixelX2 = x2 * INTERNAL_PIXEL_SIZE / CANVAS_SIZE;
+            int pixelY2 = y2 * INTERNAL_PIXEL_SIZE / CANVAS_SIZE;
 
+            g2d.setStroke(new BasicStroke(4, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.drawLine(pixelX1, pixelY1, pixelX2, pixelY2);
             repaint();
         }
 
         public void clear() {
-            g2d.setColor(Color.BLACK);
-            g2d.fillRect(0, 0, PIXEL_SIZE, PIXEL_SIZE);
             g2d.setColor(Color.WHITE);
+            g2d.fillRect(0, 0, INTERNAL_PIXEL_SIZE, INTERNAL_PIXEL_SIZE);
+            g2d.setColor(Color.BLACK);
             repaint();
-            resultLabel.setText("Panel wyczyszczony. Narysuj nową literę.");
+            resultLabel.setText("<html>Panel wyczyszczony.<br>Narysuj nową literę.</html>");
         }
 
         public double[] getBinarizedImage() {
@@ -296,8 +348,23 @@ public class RecognizerApp extends JFrame {
 
             for (int y = 0; y < PIXEL_SIZE; y++) {
                 for (int x = 0; x < PIXEL_SIZE; x++) {
-                    int rgb = image.getRGB(x, y) & 0xFF;
-                    data[y * PIXEL_SIZE + x] = (rgb > 128) ? 1.0 : 0.0;
+                    int startX = x * 2;
+                    int startY = y * 2;
+
+                    int sum = 0;
+                    for (int dy = 0; dy < 2; dy++) {
+                        for (int dx = 0; dx < 2; dx++) {
+                            int highResX = startX + dx;
+                            int highResY = startY + dy;
+                            if (highResX < INTERNAL_PIXEL_SIZE && highResY < INTERNAL_PIXEL_SIZE) {
+                                sum += image.getRGB(highResX, highResY) & 0xFF;
+                            }
+                        }
+                    }
+                    
+                    int average = sum / 4;
+
+                    data[y * PIXEL_SIZE + x] = (average < 128) ? 1.0 : 0.0;
                 }
             }
 
@@ -309,23 +376,6 @@ public class RecognizerApp extends JFrame {
             super.paintComponent(g);
 
             g.drawImage(image.getScaledInstance(CANVAS_SIZE, CANVAS_SIZE, Image.SCALE_SMOOTH), 0, 0, this);
-
-            g.setColor(new Color(80, 80, 80));
-            for (int i = 0; i <= PIXEL_SIZE; i++) {
-                int pos = i * CANVAS_SIZE / PIXEL_SIZE;
-                g.drawLine(pos, 0, pos, CANVAS_SIZE);
-                g.drawLine(0, pos, CANVAS_SIZE, pos);
-            }
         }
-    }
-
-    public static void main(String[] args) {
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        
-        SwingUtilities.invokeLater(RecognizerApp::new);
     }
 }
