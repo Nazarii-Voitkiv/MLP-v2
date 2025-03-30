@@ -1,67 +1,158 @@
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
+import java.nio.file.*;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class Trainer {
-    
     private static final String MODEL_PATH = "model.dat";
+    private static final String HARD_EXAMPLES_DIR = "hard_examples";
+    private static final char[] LETTERS = {'M', 'O', 'N'};
     
     public static void main(String[] args) {
         List<Sample> samples = MyDataLoader.loadSamples();
-
         if (samples.isEmpty()) {
             System.err.println("Błąd: brak próbek do treningu. Sprawdź folder data/");
             return;
         }
 
-        NeuralNetwork net = new NeuralNetwork();
-        File modelFile = new File(MODEL_PATH);
+        createHardExamplesDirectory();
         
-        if (modelFile.exists()) {
+        NeuralNetwork net = new NeuralNetwork();
+        if (new File(MODEL_PATH).exists()) {
             try {
                 net.loadModel(MODEL_PATH);
+                System.out.println("Załadowano istniejący model.");
+                System.out.println("Przeprowadzam trening istniejącego modelu...");
+                configureNetworkForTraining(net);
+                trainAndEvaluateModel(net, samples);
             } catch (IOException | ClassNotFoundException e) {
+                System.out.println("Nie udało się załadować istniejącego modelu. Tworzę nowy model...");
                 trainNewModel(net, samples);
             }
         } else {
             trainNewModel(net, samples);
         }
-
-        calculateAndPrintAccuracy(net, samples);
+    }
+    
+    private static void createHardExamplesDirectory() {
+        try {
+            Files.createDirectories(Paths.get(HARD_EXAMPLES_DIR));
+        } catch (IOException e) {
+            System.err.println("Nie można utworzyć katalogu dla trudnych przykładów: " + e.getMessage());
+        }
+    }
+    
+    private static void configureNetworkForTraining(NeuralNetwork net) {
+        net.setPatience(20);
+        net.setValidationSplit(0.2);
+        net.setDropoutRate(0.1);
+        net.setInitialLearningRate(0.0001);
+        net.setPeakLearningRate(0.005);
+        net.setWarmupEpochs(5);
     }
     
     private static void trainNewModel(NeuralNetwork net, List<Sample> samples) {
-        net.setPatience(10);
-        net.setValidationSplit(0.2);
-        net.train(samples, 200);
+        System.out.println("Tworzę nowy model...");
+        configureNetworkForTraining(net);
+        trainAndEvaluateModel(net, samples);
+    }
+    
+    private static void trainAndEvaluateModel(NeuralNetwork net, List<Sample> samples) {
+        List<Sample> balancedSamples = balanceSamples(samples);
+        
+        net.train(balancedSamples, 300);
+        saveModel(net);
 
+        calculateAndPrintAccuracy(net, samples);
+        printRecommendations(net, samples);
+    }
+    
+    private static List<Sample> balanceSamples(List<Sample> samples) {
+        int[] countPerClass = new int[LETTERS.length];
+        List<List<Sample>> samplesPerClass = new ArrayList<>();
+        
+        for (int i = 0; i < LETTERS.length; i++) {
+            samplesPerClass.add(new ArrayList<>());
+        }
+        
+        for (Sample sample : samples) {
+            int classIndex = findMaxIndex(sample.getTarget());
+            samplesPerClass.get(classIndex).add(sample);
+            countPerClass[classIndex]++;
+        }
+        
+        int maxCount = Arrays.stream(countPerClass).max().orElse(0);
+        
+        List<Sample> balancedSamples = new ArrayList<>();
+        for (int i = 0; i < LETTERS.length; i++) {
+            List<Sample> classSamples = samplesPerClass.get(i);
+            balancedSamples.addAll(classSamples);
+            
+            if (classSamples.isEmpty() || countPerClass[i] >= maxCount) {
+                continue;
+            }
+            
+            int duplicatesNeeded = maxCount - countPerClass[i];
+            int fullCopies = duplicatesNeeded / countPerClass[i];
+            int remainder = duplicatesNeeded % countPerClass[i];
+            
+            for (int j = 0; j < fullCopies; j++) {
+                balancedSamples.addAll(classSamples);
+            }
+            
+            for (int j = 0; j < remainder; j++) {
+                balancedSamples.add(classSamples.get(j % classSamples.size()));
+            }
+        }
+        
+        Collections.shuffle(balancedSamples);
+        System.out.println("Zrównoważony zbiór treningowy: " + balancedSamples.size() + " próbek");
+        
+        return balancedSamples;
+    }
+    
+    private static void saveModel(NeuralNetwork net) {
         try {
             net.saveModel(MODEL_PATH);
+            System.out.println("Model został zapisany do " + MODEL_PATH);
         } catch (IOException e) {
             System.err.println("Błąd podczas zapisywania modelu: " + e.getMessage());
         }
     }
     
     private static void calculateAndPrintAccuracy(NeuralNetwork net, List<Sample> samples) {
-        int correctPredictions = 0;
-        int totalSamples = samples.size();
+        int[] correctPredictions = new int[LETTERS.length];
+        int[] totalSamples = new int[LETTERS.length];
         
         for (Sample sample : samples) {
             double[] prediction = net.predict(sample.getInput());
             int predictedIndex = findMaxIndex(prediction);
             int targetIndex = findMaxIndex(sample.getTarget());
             
+            totalSamples[targetIndex]++;
             if (predictedIndex == targetIndex) {
-                correctPredictions++;
+                correctPredictions[targetIndex]++;
             }
         }
         
-        double accuracy = (double) correctPredictions / totalSamples * 100;
-        System.out.printf("Dokładność: %.2f%% (%d/%d poprawnych prognoz)%n", 
-                         accuracy, correctPredictions, totalSamples);
+        int totalCorrect = Arrays.stream(correctPredictions).sum();
+        int total = Arrays.stream(totalSamples).sum();
+        double overallAccuracy = (double) totalCorrect / total * 100;
+        
+        System.out.println("\nDokładność rozpoznawania:");
+        System.out.printf("Ogólna: %.2f%% (%d/%d poprawnych prognoz)\n", 
+                         overallAccuracy, totalCorrect, total);
+        
+        for (int i = 0; i < LETTERS.length; i++) {
+            double accuracy = totalSamples[i] > 0 ? 
+                (double) correctPredictions[i] / totalSamples[i] * 100 : 0;
+            System.out.printf("Litera %c: %.2f%% (%d/%d poprawnych)\n", 
+                             LETTERS[i], accuracy, correctPredictions[i], totalSamples[i]);
+        }
     }
     
-     private static int findMaxIndex(double[] array) {
+    private static int findMaxIndex(double[] array) {
         int maxIndex = 0;
         double maxValue = array[0];
         
@@ -73,5 +164,32 @@ public class Trainer {
         }
         
         return maxIndex;
+    }
+    
+    private static void printRecommendations(NeuralNetwork net, List<Sample> samples) {
+        int[] misclassified = new int[LETTERS.length];
+        
+        for (Sample sample : samples) {
+            double[] prediction = net.predict(sample.getInput());
+            int predictedIndex = findMaxIndex(prediction);
+            int actualIndex = findMaxIndex(sample.getTarget());
+            
+            if (predictedIndex != actualIndex) {
+                misclassified[actualIndex]++;
+            }
+        }
+        
+        int mostConfusedIndex = 0;
+        for (int i = 1; i < LETTERS.length; i++) {
+            if (misclassified[i] > misclassified[mostConfusedIndex]) {
+                mostConfusedIndex = i;
+            }
+        }
+        
+        if (misclassified[mostConfusedIndex] > 0) {
+            System.out.println("\nZalecenie: Dodaj więcej przykładów dla litery " + 
+                              LETTERS[mostConfusedIndex] + 
+                              " aby poprawić dokładność rozpoznawania.");
+        }
     }
 }
