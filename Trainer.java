@@ -1,12 +1,10 @@
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class Trainer {
     private static final String MODEL_PATH = "model.dat";
-    private static final String HARD_EXAMPLES_DIR = "hard_examples";
     private static final char[] LETTERS = {'M', 'O', 'N'};
     
     public static void main(String[] args) {
@@ -15,8 +13,6 @@ public class Trainer {
             System.err.println("Błąd: brak próbek do treningu. Sprawdź folder data/");
             return;
         }
-
-        createHardExamplesDirectory();
         
         NeuralNetwork net = new NeuralNetwork();
         if (new File(MODEL_PATH).exists()) {
@@ -35,21 +31,13 @@ public class Trainer {
         }
     }
     
-    private static void createHardExamplesDirectory() {
-        try {
-            Files.createDirectories(Paths.get(HARD_EXAMPLES_DIR));
-        } catch (IOException e) {
-            System.err.println("Nie można utworzyć katalogu dla trudnych przykładów: " + e.getMessage());
-        }
-    }
-    
     private static void configureNetworkForTraining(NeuralNetwork net) {
-        net.setPatience(20);
+        net.setPatience(25);
         net.setValidationSplit(0.2);
-        net.setDropoutRate(0.1);
-        net.setInitialLearningRate(0.0001);
-        net.setPeakLearningRate(0.005);
-        net.setWarmupEpochs(5);
+        net.setDropoutRate(0.0);  // Updated to 0.1
+        net.setInitialLearningRate(0.0001);  
+        net.setPeakLearningRate(0.003);
+        net.setWarmupEpochs(15);
     }
     
     private static void trainNewModel(NeuralNetwork net, List<Sample> samples) {
@@ -65,7 +53,6 @@ public class Trainer {
         saveModel(net);
 
         calculateAndPrintAccuracy(net, samples);
-        printRecommendations(net, samples);
     }
     
     private static List<Sample> balanceSamples(List<Sample> samples) {
@@ -164,32 +151,5 @@ public class Trainer {
         }
         
         return maxIndex;
-    }
-    
-    private static void printRecommendations(NeuralNetwork net, List<Sample> samples) {
-        int[] misclassified = new int[LETTERS.length];
-        
-        for (Sample sample : samples) {
-            double[] prediction = net.predict(sample.getInput());
-            int predictedIndex = findMaxIndex(prediction);
-            int actualIndex = findMaxIndex(sample.getTarget());
-            
-            if (predictedIndex != actualIndex) {
-                misclassified[actualIndex]++;
-            }
-        }
-        
-        int mostConfusedIndex = 0;
-        for (int i = 1; i < LETTERS.length; i++) {
-            if (misclassified[i] > misclassified[mostConfusedIndex]) {
-                mostConfusedIndex = i;
-            }
-        }
-        
-        if (misclassified[mostConfusedIndex] > 0) {
-            System.out.println("\nZalecenie: Dodaj więcej przykładów dla litery " + 
-                              LETTERS[mostConfusedIndex] + 
-                              " aby poprawić dokładność rozpoznawania.");
-        }
     }
 }

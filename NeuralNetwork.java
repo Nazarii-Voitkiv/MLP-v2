@@ -3,7 +3,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class NeuralNetwork {
-    private int inputSize, hidden0Size, hidden1Size, hidden2Size, outputSize;
+    private int inputSize, hidden0Size, hidden1Size, hidden2Size, hidden3Size, hidden4Size, outputSize;
     private int[] layerSizes;
     private double[][][] weights;
     private double[][] biases;
@@ -14,24 +14,26 @@ public class NeuralNetwork {
     private double dropoutRate = 0.0;
     private boolean isTraining = false;
     
-    private int patience = 20;
+    private int patience = 25;
     private double bestValidationError = Double.MAX_VALUE;
     private int epochsSinceImprovement = 0;
     private double validationSplit = 0.2;
     private double initialLearningRate = 0.0001;
-    private double peakLearningRate = 0.005;
-    private int warmupEpochs = 5;
+    private double peakLearningRate = 0.003;
+    private int warmupEpochs = 15;
 
     public NeuralNetwork(int inputSize, int hidden0Size, int hidden1Size, int hidden2Size, 
-                         int outputSize, double learningRate) {
+                         int hidden3Size, int hidden4Size, int outputSize, double learningRate) {
         this.inputSize = inputSize;
         this.hidden0Size = hidden0Size;
         this.hidden1Size = hidden1Size;
         this.hidden2Size = hidden2Size;
+        this.hidden3Size = hidden3Size;
+        this.hidden4Size = hidden4Size;
         this.outputSize = outputSize;
         this.learningRate = learningRate;
         
-        this.layerSizes = new int[]{inputSize, hidden0Size, hidden1Size, hidden2Size, outputSize};
+        this.layerSizes = new int[]{inputSize, hidden0Size, hidden1Size, hidden2Size, hidden3Size, hidden4Size, outputSize};
         
         int numLayers = layerSizes.length - 1;
         this.weights = new double[numLayers][][];
@@ -41,8 +43,8 @@ public class NeuralNetwork {
     }
     
     public NeuralNetwork() {
-        // Use a wider network architecture to better distinguish features
-        this(784, 512, 128, 32, 3, 0.0001);
+        // Use architecture: 784 → 512 → 256 → 128 → 32 → 16 → 3
+        this(784, 512, 256, 128, 32, 16, 3, 0.0001);
     }
     
     public void setDropoutRate(double rate) {
@@ -461,7 +463,7 @@ public class NeuralNetwork {
         for (Sample sample : trainingData) {
             augmentedData.add(sample);
             
-            // Determine target class to apply appropriate augmentation levels
+            // Determine target class
             int classIndex = -1;
             double[] target = sample.getTarget();
             for (int i = 0; i < target.length; i++) {
@@ -471,11 +473,8 @@ public class NeuralNetwork {
                 }
             }
             
-            // More augmentations for problematic classes (O and N)
-            int numAugmentations = 9;
-            if (classIndex == 1 || classIndex == 2) {  // O or N
-                numAugmentations = 12;  // Add more augmentations for these classes
-            }
+            // Generate 10-15 augmentations per sample
+            int numAugmentations = ThreadLocalRandom.current().nextInt(10, 16);
             
             for (int i = 0; i < numAugmentations; i++) {
                 augmentedData.add(augmentSample(sample));
@@ -614,7 +613,6 @@ public class NeuralNetwork {
     public void saveModel(String path) throws IOException {
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path))) {
             writeModelToStream(oos);
-            System.out.println("Model został pomyślnie zapisany do pliku: " + path);
         } catch (IOException e) {
             System.err.println("Błąd podczas zapisywania modelu: " + e.getMessage());
             throw e;
@@ -626,6 +624,8 @@ public class NeuralNetwork {
         oos.writeInt(hidden0Size);
         oos.writeInt(hidden1Size);
         oos.writeInt(hidden2Size);
+        oos.writeInt(hidden3Size);
+        oos.writeInt(hidden4Size);
         oos.writeInt(outputSize);
         oos.writeDouble(learningRate);
         oos.writeDouble(dropoutRate);
@@ -653,11 +653,13 @@ public class NeuralNetwork {
         this.hidden0Size = ois.readInt();
         this.hidden1Size = ois.readInt();
         this.hidden2Size = ois.readInt();
+        this.hidden3Size = ois.readInt();
+        this.hidden4Size = ois.readInt();
         this.outputSize = ois.readInt();
         this.learningRate = ois.readDouble();
         this.dropoutRate = ois.readDouble();
         
-        this.layerSizes = new int[]{inputSize, hidden0Size, hidden1Size, hidden2Size, outputSize};
+        this.layerSizes = new int[]{inputSize, hidden0Size, hidden1Size, hidden2Size, hidden3Size, hidden4Size, outputSize};
         
         int numLayers = layerSizes.length - 1;
         this.weights = new double[numLayers][][];
