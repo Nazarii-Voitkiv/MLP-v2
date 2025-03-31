@@ -16,30 +16,27 @@ public class RecognizerApp extends JFrame {
     private static final String DATA_DIR = "data";
     private static final String TEST_DATA_DIR = "test_data";
     private static final char[] LETTERS = {'M', 'O', 'N'};
+    
+    private boolean isModelAvailable = false;
+    private JTextArea trainingConsoleArea;
+    private JScrollPane trainingScrollPane;
 
     private DrawingPanel drawingPanel;
     private JLabel resultLabel;
     private JTextArea trainingAccuracyTextArea;
     private JTextArea testAccuracyTextArea;
-    private JButton recognizeButton, clearButton, addToTrainingButton, addToTestingButton;
+    private JButton recognizeButton, clearButton, addToTrainingButton, addToTestingButton, stopTrainingButton;
     private NeuralNetwork neuralNetwork;
     private JRadioButton radioM, radioO, radioN;
     private ButtonGroup letterGroup;
+    private volatile boolean trainingInProgress = false;
+    private volatile boolean stopTrainingRequested = false;
 
     public static void main(String[] args) {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
             e.printStackTrace();
-        }
-
-        if (!new File(MODEL_PATH).exists()) {
-            JOptionPane.showMessageDialog(null,
-                "Błąd: Nie znaleziono pliku modelu '" + MODEL_PATH + "'.\n\n" +
-                "Uruchom najpierw program Trainer, aby wytrenować i zapisać model.",
-                "Brak pliku modelu", JOptionPane.ERROR_MESSAGE);
-            System.exit(1);
-            return;
         }
         
         SwingUtilities.invokeLater(RecognizerApp::new);
@@ -49,52 +46,64 @@ public class RecognizerApp extends JFrame {
         setTitle("Rozpoznawanie liter M O N");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(null);
-        // Збільшуємо розмір вікна, щоб додати місце для відступу між частинами
         setSize(CANVAS_SIZE * 2 + 120, CANVAS_SIZE + 300);
         setLocationRelativeTo(null);
         setResizable(false);
         
-        if (!loadNeuralNetwork()) {
-            dispose();
-            return;
+        isModelAvailable = new File(MODEL_PATH).exists();
+        
+        if (isModelAvailable) {
+            if (!loadNeuralNetwork()) {
+                dispose();
+                return;
+            }
+        } else {
+            neuralNetwork = new NeuralNetwork();
         }
 
         initializeUI();
         
-        evaluateModel(DATA_DIR, trainingAccuracyTextArea);
-        evaluateModel(TEST_DATA_DIR, testAccuracyTextArea);
+        if (isModelAvailable) {
+            evaluateModel(DATA_DIR, trainingAccuracyTextArea);
+            evaluateModel(TEST_DATA_DIR, testAccuracyTextArea);
+        }
         
         setVisible(true);
     }
     
     private void initializeUI() {
-        // Звичайний бічний відступ
         int margin = 40;
-        // Додатковий відступ між лівою та правою частиною
         int centerGap = 40;
         
         createDrawingPanel(margin);
         
-        // Розраховуємо позицію для правої частини, додаючи додатковий відступ centerGap
         int rightPanelX = CANVAS_SIZE + margin + centerGap;
-        
-        // Змінюємо ширину правої панелі, щоб дорівнювала CANVAS_SIZE
         int rightPanelWidth = CANVAS_SIZE;
         
         createResultLabel(rightPanelX, rightPanelWidth, margin);
 
         int buttonHeight = 60;
-        int gap = 10; // Зменшуємо gap для кращої пропорції кнопок
+        int gap = 10;
         int startY = 120;
-
-        // Змінюємо розмір кнопок, щоб вони разом з gap дорівнювали CANVAS_SIZE
         int buttonWidth = (rightPanelWidth - gap) / 2;
 
         clearButton = createButton("Wyczyść", e -> drawingPanel.clear(), 
             rightPanelX, startY, buttonWidth, buttonHeight);
             
-        recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing(), 
-            rightPanelX + buttonWidth + gap, startY, buttonWidth, buttonHeight);
+        if (isModelAvailable) {
+            recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing(), 
+                rightPanelX + buttonWidth + gap, startY, buttonWidth, buttonHeight);
+        } else {
+            recognizeButton = createButton("Trenuj model", e -> trainModel(), 
+                rightPanelX + buttonWidth + gap, startY, buttonWidth, buttonHeight);
+            
+            stopTrainingButton = createButton("Przerwij", e -> stopTraining(), 
+                rightPanelX + buttonWidth + gap, startY, buttonWidth, buttonHeight);
+            stopTrainingButton.setBackground(new Color(200, 60, 60));
+            stopTrainingButton.setForeground(Color.BLACK);
+            stopTrainingButton.setVisible(false);
+            add(stopTrainingButton);
+        }
         
         add(clearButton);
         add(recognizeButton);
@@ -102,33 +111,38 @@ public class RecognizerApp extends JFrame {
         createRadioButtons(rightPanelX, startY + buttonHeight + gap);
         createBottomButtons(rightPanelX, startY + buttonHeight + gap + 80);
         
-        // Передаємо centerGap для врахування у нижній панелі
-        createAccuracyPanel(margin, centerGap);
+        if (isModelAvailable) {
+            createAccuracyPanel(margin, centerGap);
+        } else {
+            createTrainingConsolePanel(margin, centerGap);
+        }
     }
     
-    private void createDrawingPanel(int margin) {
-        drawingPanel = new DrawingPanel();
-        drawingPanel.setBounds(margin, margin, CANVAS_SIZE, CANVAS_SIZE); // Use consistent margin
-        add(drawingPanel);
-    }
-    
-    private void createResultLabel(int rightPanelX, int rightPanelWidth, int margin) {
-        resultLabel = new JLabel("<html>Narysuj literę (M, O lub N)</html>");
-        resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 20));
-        
-        // Змінюємо ширину мітки, щоб дорівнювала CANVAS_SIZE
-        resultLabel.setBounds(rightPanelX, margin, rightPanelWidth, 80);
-        add(resultLabel);
-    }
-    
-    private void createAccuracyPanel(int margin, int centerGap) {
-        // Встановлюємо ширину панелей рівною ширині квадрата для малювання
-        int panelWidth = CANVAS_SIZE; // Змінено з CANVAS_SIZE - centerGap/2 на повний розмір CANVAS_SIZE
+    private void createTrainingConsolePanel(int margin, int centerGap) {
+        int totalWidth = CANVAS_SIZE * 2 + centerGap;
         int panelHeight = 160;
         int startY = CANVAS_SIZE + 60;
         
-        // Ліва панель
+        JPanel consolePanel = new JPanel(new BorderLayout());
+        consolePanel.setBorder(BorderFactory.createTitledBorder("Status trenowania"));
+        consolePanel.setBounds(margin, startY, totalWidth, panelHeight);
+        
+        trainingConsoleArea = new JTextArea();
+        trainingConsoleArea.setEditable(false);
+        trainingConsoleArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        trainingConsoleArea.setBackground(new Color(240, 240, 240));
+        
+        trainingScrollPane = new JScrollPane(trainingConsoleArea);
+        consolePanel.add(trainingScrollPane, BorderLayout.CENTER);
+        
+        add(consolePanel);
+    }
+    
+    private void createAccuracyPanel(int margin, int centerGap) {
+        int panelWidth = CANVAS_SIZE;
+        int panelHeight = 160;
+        int startY = CANVAS_SIZE + 60;
+        
         JPanel trainingAccuracyPanel = new JPanel(new BorderLayout());
         trainingAccuracyPanel.setBorder(BorderFactory.createTitledBorder("Dokładność na danych treningowych"));
         trainingAccuracyPanel.setBounds(margin, startY, panelWidth, panelHeight);
@@ -137,10 +151,8 @@ public class RecognizerApp extends JFrame {
         JScrollPane trainingScrollPane = new JScrollPane(trainingAccuracyTextArea);
         trainingAccuracyPanel.add(trainingScrollPane, BorderLayout.CENTER);
         
-        // Права панель з додатковим відступом
         JPanel testAccuracyPanel = new JPanel(new BorderLayout());
         testAccuracyPanel.setBorder(BorderFactory.createTitledBorder("Dokładność na danych testowych"));
-        // Додаємо centerGap, щоб відсунути праву панель
         testAccuracyPanel.setBounds(CANVAS_SIZE + margin + centerGap, startY, panelWidth, panelHeight);
         
         testAccuracyTextArea = createAccuracyTextArea();
@@ -159,19 +171,254 @@ public class RecognizerApp extends JFrame {
         return textArea;
     }
     
+    private void trainModel() {
+        new Thread(() -> {
+            trainingInProgress = true;
+            stopTrainingRequested = false;
+            
+            SwingUtilities.invokeLater(() -> {
+                recognizeButton.setVisible(false);
+                stopTrainingButton.setVisible(true);
+                clearButton.setEnabled(false);
+                addToTrainingButton.setEnabled(false);
+                addToTestingButton.setEnabled(false);
+            });
+            
+            resultLabel.setText("<html>Rozpoczęto trenowanie modelu.<br>Proszę czekać...</html>");
+            redirectSystemOutToTextArea();
+            
+            try {
+                List<Sample> samples = MyDataLoader.loadSamples();
+                if (samples.isEmpty()) {
+                    appendToConsole("Błąd: brak próbek do treningu. Sprawdź folder data/");
+                    return;
+                }
+                
+                configureNetworkForTraining(neuralNetwork);
+                List<Sample> balancedSamples = balanceSamples(samples);
+                
+                trainWithStopCheck(balancedSamples);
+                
+                try {
+                    neuralNetwork.saveModel(MODEL_PATH);
+                    
+                    if (!stopTrainingRequested) {
+                        appendToConsole("Model został zapisany do " + MODEL_PATH);
+                        
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(RecognizerApp.this,
+                                "Model został pomyślnie wytrenowany i zapisany!\n" +
+                                "Aplikacja będzie zrestartowana, aby włączyć funkcje rozpoznawania.",
+                                "Trenowanie zakończone", JOptionPane.INFORMATION_MESSAGE);
+                            
+                            dispose();
+                            new RecognizerApp();
+                        });
+                    } else {
+                        appendToConsole("Częściowo przeszkolony model został zapisany do " + MODEL_PATH);
+                        appendToConsole("Trenowanie zostało przerwane przez użytkownika.");
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(RecognizerApp.this,
+                                "Częściowo przeszkolony model został zapisany!\n" +
+                                "Aplikacja będzie zrestartowana do trybu rozpoznawania.",
+                                "Trenowanie przerwane", JOptionPane.INFORMATION_MESSAGE);
+                            
+                            dispose();
+                            new RecognizerApp();
+                        });
+                    }
+                } catch (IOException e) {
+                    appendToConsole("Błąd podczas zapisywania modelu: " + e.getMessage());
+                }
+                
+            } finally {
+                trainingInProgress = false;
+                stopTrainingRequested = false;
+                
+                SwingUtilities.invokeLater(() -> {
+                    stopTrainingButton.setVisible(false);
+                    recognizeButton.setVisible(true);
+                    clearButton.setEnabled(true);
+                    updateButtonStates();
+                });
+                
+                restoreSystemOut();
+            }
+        }).start();
+    }
+    
+    private void trainWithStopCheck(List<Sample> samples) {
+        try {
+            int epochs = 300;
+
+            System.out.println("Rozpoczęcie uczenia sieci neuronowej...");
+            System.out.println("Architektura: " + neuralNetwork.getArchitectureString());
+            System.out.println("Liczba epok: " + epochs);
+            System.out.println("Rozmiar zbioru uczącego: " + samples.size());
+            
+            List<Sample> trainingData = new ArrayList<>();
+            List<Sample> validationData = new ArrayList<>();
+            
+            Collections.shuffle(samples);
+            int validationSize = (int)(samples.size() * 0.2);
+            int trainingSize = samples.size() - validationSize;
+            
+            trainingData.addAll(samples.subList(0, trainingSize));
+            validationData.addAll(samples.subList(trainingSize, samples.size()));
+            
+            System.out.println("Rozmiar zbioru treningowego: " + trainingData.size());
+            System.out.println("Rozmiar zbioru walidacyjnego: " + validationData.size());
+            
+            for (int epoch = 0; epoch < epochs && !stopTrainingRequested; epoch++) {
+                neuralNetwork.trainOneEpoch(trainingData, validationData, epoch);
+                
+                if (stopTrainingRequested) {
+                    System.out.println("Przerwano trening na epoce " + (epoch + 1));
+                    break;
+                }
+            }
+            
+            if (!stopTrainingRequested) {
+                neuralNetwork.restoreBestModel();
+                System.out.println("Uczenie zakończone! Najlepszy błąd walidacji: " + neuralNetwork.getBestValidationError());
+            }
+            
+        } catch (Exception e) {
+            System.err.println("Błąd podczas trenowania: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private void stopTraining() {
+        stopTrainingRequested = true;
+        stopTrainingButton.setEnabled(false);
+        stopTrainingButton.setText("Zatrzymywanie...");
+        stopTrainingButton.setForeground(Color.DARK_GRAY);
+        appendToConsole("Zatrzymywanie trenowania na żądanie użytkownika...");
+    }
+    
+    private void configureNetworkForTraining(NeuralNetwork net) {
+        net.setPatience(25);
+        net.setValidationSplit(0.2);
+        net.setDropoutRate(0.0);
+        net.setInitialLearningRate(0.0001);  
+        net.setPeakLearningRate(0.003);
+        net.setWarmupEpochs(15);
+    }
+    
+    private List<Sample> balanceSamples(List<Sample> samples) {
+        int[] countPerClass = new int[LETTERS.length];
+        List<List<Sample>> samplesPerClass = new ArrayList<>();
+        
+        for (int i = 0; i < LETTERS.length; i++) {
+            samplesPerClass.add(new ArrayList<>());
+        }
+        
+        for (Sample sample : samples) {
+            int classIndex = findMaxIndex(sample.getTarget());
+            samplesPerClass.get(classIndex).add(sample);
+            countPerClass[classIndex]++;
+        }
+        
+        int maxCount = Arrays.stream(countPerClass).max().orElse(0);
+        
+        List<Sample> balancedSamples = new ArrayList<>();
+        for (int i = 0; i < LETTERS.length; i++) {
+            List<Sample> classSamples = samplesPerClass.get(i);
+            balancedSamples.addAll(classSamples);
+            
+            if (classSamples.isEmpty() || countPerClass[i] >= maxCount) {
+                continue;
+            }
+            
+            int duplicatesNeeded = maxCount - countPerClass[i];
+            int fullCopies = duplicatesNeeded / countPerClass[i];
+            int remainder = duplicatesNeeded % countPerClass[i];
+            
+            for (int j = 0; j < fullCopies; j++) {
+                balancedSamples.addAll(classSamples);
+            }
+            
+            for (int j = 0; j < remainder; j++) {
+                balancedSamples.add(classSamples.get(j % classSamples.size()));
+            }
+        }
+        
+        Collections.shuffle(balancedSamples);
+        appendToConsole("Zrównoważony zbiór treningowy: " + balancedSamples.size() + " próbek");
+        
+        return balancedSamples;
+    }
+    
+    private PrintStream originalOut = System.out;
+    private PrintStream originalErr = System.err;
+    
+    private void redirectSystemOutToTextArea() {
+        PrintStream consoleStream = new PrintStream(new OutputStream() {
+            private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+            @Override
+            public void write(int b) {
+                buffer.write(b);
+                if (b == '\n') {
+                    final String line = buffer.toString(java.nio.charset.StandardCharsets.UTF_8);
+                    SwingUtilities.invokeLater(() -> appendToConsole(line.trim()));
+                    buffer.reset();
+                }
+            }
+            
+            @Override
+            public void flush() {
+                if (buffer.size() > 0) {
+                    final String line = buffer.toString(java.nio.charset.StandardCharsets.UTF_8);
+                    SwingUtilities.invokeLater(() -> appendToConsole(line.trim()));
+                    buffer.reset();
+                }
+            }
+        }, true, java.nio.charset.StandardCharsets.UTF_8);
+        
+        System.setOut(consoleStream);
+        System.setErr(consoleStream);
+    }
+    
+    private void restoreSystemOut() {
+        System.setOut(originalOut);
+        System.setErr(originalErr);
+    }
+    
+    private void appendToConsole(String text) {
+        trainingConsoleArea.append(text + "\n");
+        trainingConsoleArea.setCaretPosition(trainingConsoleArea.getDocument().getLength());
+        trainingScrollPane.validate();
+    }
+
+    private void createDrawingPanel(int margin) {
+        drawingPanel = new DrawingPanel();
+        drawingPanel.setBounds(margin, margin, CANVAS_SIZE, CANVAS_SIZE);
+        add(drawingPanel);
+    }
+    
+    private void createResultLabel(int rightPanelX, int rightPanelWidth, int margin) {
+        resultLabel = new JLabel("<html>" + (isModelAvailable ? "Narysuj literę (M, O lub N)" : "Narysuj literę i trenuj model") + "</html>");
+        resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 20));
+        resultLabel.setBounds(rightPanelX, margin, rightPanelWidth, 80);
+        add(resultLabel);
+    }
+    
     private void createRadioButtons(int startX, int yPos) {
         JPanel radioPanel = new JPanel();
         radioPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 30, 10));
         radioPanel.setBorder(BorderFactory.createTitledBorder("Wybierz literę"));
 
-        int panelWidth = CANVAS_SIZE; // Make panel width match canvas width
+        int panelWidth = CANVAS_SIZE;
         radioPanel.setBounds(startX, yPos, panelWidth, 70);
         
         radioM = new JRadioButton("M");
         radioO = new JRadioButton("O");
         radioN = new JRadioButton("N");
         
-        Font radioFont = new Font(radioM.getFont().getName(), Font.BOLD, 20); // Larger font
+        Font radioFont = new Font(radioM.getFont().getName(), Font.BOLD, 20);
         radioM.setFont(radioFont);
         radioO.setFont(radioFont);
         radioN.setFont(radioFont);
@@ -194,7 +441,7 @@ public class RecognizerApp extends JFrame {
     }
     
     private void createBottomButtons(int startX, int startY) {
-        int buttonWidth = CANVAS_SIZE; // Make buttons the same width as canvas
+        int buttonWidth = CANVAS_SIZE;
         int buttonHeight = 60;
         int gap = 15;
 
@@ -213,15 +460,11 @@ public class RecognizerApp extends JFrame {
     
     private JButton createButton(String text, ActionListener action, int x, int y, int width, int height) {
         JButton button = new JButton(text);
-        button.setFont(new Font(button.getFont().getName(), Font.BOLD, 16)); // Larger font for all buttons
+        button.setFont(new Font(button.getFont().getName(), Font.BOLD, 16));
         button.setMargin(new Insets(10, 10, 10, 10));
         button.addActionListener(action);
         button.setBounds(x, y, width, height);
         return button;
-    }
-    
-    private JButton createButton(String text, ActionListener action, int x, int y) {
-        return createButton(text, action, x, y, 250, 50);
     }
     
     private void updateButtonStates() {

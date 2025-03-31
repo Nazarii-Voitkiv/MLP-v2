@@ -162,8 +162,8 @@ public class NeuralNetwork {
             }
         }
     }
-    
-    private void restoreBestModel() {
+
+    public void restoreBestModel() {
         if (bestWeights == null) return;
         
         int numLayers = layerSizes.length - 1;
@@ -421,6 +421,22 @@ public class NeuralNetwork {
         System.out.println("Uczenie zakończone! Najlepszy błąd walidacji: " + bestValidationError);
     }
     
+    public void trainOneEpoch(List<Sample> trainingData, List<Sample> validationData, int epoch) {
+        updateLearningRate(epoch);
+        List<Sample> augmentedData = createAugmentedData(trainingData, epoch);
+        double trainingError = trainEpoch(augmentedData) / (augmentedData.size() * outputSize);
+        double validationError = evaluateError(validationData);
+
+        System.out.print(String.format("Epoka %d/%d, błąd (trening): %.6f, błąd (walidacja): %.6f", 
+                         epoch + 1, 300, trainingError, validationError));
+        System.out.println();
+
+        if (checkEarlyStopping(validationError, epoch)) {
+            System.out.println("Wczesne zatrzymanie na epoce " + (epoch + 1) + 
+                             " (błąd walidacji nie poprawiał się przez " + patience + " epok)");
+        }
+    }
+    
     private void printTrainingConfiguration(int totalSamples, int epochs) {
         System.out.println("Rozpoczęcie uczenia sieci neuronowej...");
         System.out.println("Architektura: " + getArchitectureString());
@@ -455,7 +471,7 @@ public class NeuralNetwork {
         }
     }
     
-    private List<Sample> createAugmentedData(List<Sample> trainingData, int epoch) {
+    public List<Sample> createAugmentedData(List<Sample> trainingData, int epoch) {
         List<Sample> augmentedData = new ArrayList<>();
         
         for (Sample sample : trainingData) {
@@ -586,11 +602,15 @@ public class NeuralNetwork {
         }
     }
     
-    private String getArchitectureString() {
+    public String getArchitectureString() {
         return Arrays.stream(layerSizes)
                .mapToObj(String::valueOf)
                .reduce((a, b) -> a + " → " + b)
                .orElse("");
+    }
+    
+    public double getBestValidationError() {
+        return bestValidationError;
     }
     
     public double[] predict(double[] input) {
