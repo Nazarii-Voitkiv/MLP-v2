@@ -1,15 +1,18 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.io.*;
-import java.nio.file.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Aplikacja do tworzenia próbek liter dla treningu sieci neuronowej
- */
 public class LetterDrawingApp extends JFrame {
     private static final int CANVAS_SIZE = 280;
     private static final int PIXEL_SIZE = 28;

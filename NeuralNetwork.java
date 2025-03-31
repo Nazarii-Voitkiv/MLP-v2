@@ -43,7 +43,6 @@ public class NeuralNetwork {
     }
     
     public NeuralNetwork() {
-        // Use architecture: 784 → 512 → 256 → 128 → 32 → 16 → 3
         this(784, 512, 256, 128, 32, 16, 3, 0.0001);
     }
     
@@ -193,7 +192,7 @@ public class NeuralNetwork {
             double[] finalOutputs = outputs[outputs.length - 1];
 
             for (int k = 0; k < outputSize; k++) {
-                totalError += Math.pow(sample.getTarget()[k] - finalOutputs[k], 2); // MSE
+                totalError += Math.pow(sample.getTarget()[k] - finalOutputs[k], 2);
             }
         }
         
@@ -451,8 +450,7 @@ public class NeuralNetwork {
                           (peakLearningRate - initialLearningRate) * (epoch / (double)warmupEpochs);
             System.out.println("Rozgrzewanie: Learning rate zwiększony do: " + learningRate);
         } else if ((epoch - warmupEpochs) % 25 == 0 && epoch > warmupEpochs) {
-            // More aggressive decay to help convergence
-            learningRate *= 0.85;  // This is the 15% reduction (multiplying by 0.85)
+            learningRate *= 0.85;
             System.out.println("Learning rate zmniejszony do: " + learningRate);
         }
     }
@@ -462,18 +460,14 @@ public class NeuralNetwork {
         
         for (Sample sample : trainingData) {
             augmentedData.add(sample);
-            
-            // Determine target class
-            int classIndex = -1;
+
             double[] target = sample.getTarget();
             for (int i = 0; i < target.length; i++) {
                 if (target[i] > 0.5) {
-                    classIndex = i;
                     break;
                 }
             }
-            
-            // Generate 10-15 augmentations per sample
+
             int numAugmentations = ThreadLocalRandom.current().nextInt(10, 16);
             
             for (int i = 0; i < numAugmentations; i++) {
@@ -514,7 +508,7 @@ public class NeuralNetwork {
         deltas[numLayers - 2] = new double[outputSize];
         for (int n = 0; n < outputSize; n++) {
             double error = target[n] - layerOutputs[numLayers - 1][n];
-            totalError += Math.pow(error, 2);  // Tutaj jest używany MSE
+            totalError += Math.pow(error, 2);
             deltas[numLayers - 2][n] = error;
         }
         

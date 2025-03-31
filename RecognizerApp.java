@@ -83,7 +83,7 @@ public class RecognizerApp extends JFrame {
         
         add(recognizeButton);
         add(clearButton);
-        add(wrongLetterButton);
+        //add(wrongLetterButton);
     }
     
     private JButton createButton(String text, ActionListener action, int x, int y) {

@@ -34,7 +34,7 @@ public class Trainer {
     private static void configureNetworkForTraining(NeuralNetwork net) {
         net.setPatience(25);
         net.setValidationSplit(0.2);
-        net.setDropoutRate(0.0);  // Updated to 0.1
+        net.setDropoutRate(0.0);
         net.setInitialLearningRate(0.0001);  
         net.setPeakLearningRate(0.003);
         net.setWarmupEpochs(15);
