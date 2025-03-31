@@ -1,7 +1,6 @@
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Trainer {
     private static final String MODEL_PATH = "model.dat";
@@ -21,13 +20,13 @@ public class Trainer {
                 System.out.println("Załadowano istniejący model.");
                 System.out.println("Przeprowadzam trening istniejącego modelu...");
                 configureNetworkForTraining(net);
-                trainAndEvaluateModel(net, samples);
+                trainAndSaveModel(net, samples);
             } catch (IOException | ClassNotFoundException e) {
                 System.out.println("Nie udało się załadować istniejącego modelu. Tworzę nowy model...");
-                trainNewModel(net, samples);
+                createAndTrainNewModel(net, samples);
             }
         } else {
-            trainNewModel(net, samples);
+            createAndTrainNewModel(net, samples);
         }
     }
     
@@ -40,17 +39,22 @@ public class Trainer {
         net.setWarmupEpochs(15);
     }
     
-    private static void trainNewModel(NeuralNetwork net, List<Sample> samples) {
+    private static void createAndTrainNewModel(NeuralNetwork net, List<Sample> samples) {
         System.out.println("Tworzę nowy model...");
         configureNetworkForTraining(net);
-        trainAndEvaluateModel(net, samples);
+        trainAndSaveModel(net, samples);
     }
     
-    private static void trainAndEvaluateModel(NeuralNetwork net, List<Sample> samples) {
+    private static void trainAndSaveModel(NeuralNetwork net, List<Sample> samples) {
         List<Sample> balancedSamples = balanceSamples(samples);
-        
         net.train(balancedSamples, 300);
-        saveModel(net);
+        
+        try {
+            net.saveModel(MODEL_PATH);
+            System.out.println("Model został zapisany do " + MODEL_PATH);
+        } catch (IOException e) {
+            System.err.println("Błąd podczas zapisywania modelu: " + e.getMessage());
+        }
     }
     
     private static List<Sample> balanceSamples(List<Sample> samples) {
@@ -95,15 +99,6 @@ public class Trainer {
         System.out.println("Zrównoważony zbiór treningowy: " + balancedSamples.size() + " próbek");
         
         return balancedSamples;
-    }
-    
-    private static void saveModel(NeuralNetwork net) {
-        try {
-            net.saveModel(MODEL_PATH);
-            System.out.println("Model został zapisany do " + MODEL_PATH);
-        } catch (IOException e) {
-            System.err.println("Błąd podczas zapisywania modelu: " + e.getMessage());
-        }
     }
     
     private static int findMaxIndex(double[] array) {

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.regex.*;
 
 public class RecognizerApp extends JFrame {
-    private static final int CANVAS_SIZE = 420; // Increased from 280
+    private static final int CANVAS_SIZE = 420;
     private static final int PIXEL_SIZE = 28;
     private static final int INTERNAL_PIXEL_SIZE = 56;
     private static final String MODEL_PATH = "model.dat";
@@ -19,12 +19,10 @@ public class RecognizerApp extends JFrame {
 
     private DrawingPanel drawingPanel;
     private JLabel resultLabel;
-    private JTextArea trainingAccuracyTextArea; // New field for training accuracy
-    private JTextArea testAccuracyTextArea;     // Renamed from accuracyTextArea
+    private JTextArea trainingAccuracyTextArea;
+    private JTextArea testAccuracyTextArea;
     private JButton recognizeButton, clearButton, addToTrainingButton, addToTestingButton;
     private NeuralNetwork neuralNetwork;
-
-    // Radio buttons for letter selection
     private JRadioButton radioM, radioO, radioN;
     private ButtonGroup letterGroup;
 
@@ -51,7 +49,8 @@ public class RecognizerApp extends JFrame {
         setTitle("Rozpoznawanie liter M O N");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(null);
-        setSize(CANVAS_SIZE + 420, CANVAS_SIZE + 250); // Increased height further to accommodate panel at bottom
+        // Збільшуємо розмір вікна, щоб додати місце для відступу між частинами
+        setSize(CANVAS_SIZE * 2 + 120, CANVAS_SIZE + 300);
         setLocationRelativeTo(null);
         setResizable(false);
         
@@ -62,83 +61,89 @@ public class RecognizerApp extends JFrame {
 
         initializeUI();
         
-        // Run model evaluation on both datasets
-        evaluateModelOnTrainingData();
-        evaluateModelOnTestData();
+        evaluateModel(DATA_DIR, trainingAccuracyTextArea);
+        evaluateModel(TEST_DATA_DIR, testAccuracyTextArea);
         
         setVisible(true);
     }
     
     private void initializeUI() {
-        createDrawingPanel();
-        createResultLabel();
+        // Звичайний бічний відступ
+        int margin = 40;
+        // Додатковий відступ між лівою та правою частиною
+        int centerGap = 40;
         
-        // First create the top row buttons
-        int buttonWidth = 250;
-        int buttonHeight = 50;
-        int startX = CANVAS_SIZE + 40;
-        int startY = CANVAS_SIZE - 250;
-        int gap = 20;
+        createDrawingPanel(margin);
         
-        // First row - two buttons side by side
+        // Розраховуємо позицію для правої частини, додаючи додатковий відступ centerGap
+        int rightPanelX = CANVAS_SIZE + margin + centerGap;
+        
+        // Змінюємо ширину правої панелі, щоб дорівнювала CANVAS_SIZE
+        int rightPanelWidth = CANVAS_SIZE;
+        
+        createResultLabel(rightPanelX, rightPanelWidth, margin);
+
+        int buttonHeight = 60;
+        int gap = 10; // Зменшуємо gap для кращої пропорції кнопок
+        int startY = 120;
+
+        // Змінюємо розмір кнопок, щоб вони разом з gap дорівнювали CANVAS_SIZE
+        int buttonWidth = (rightPanelWidth - gap) / 2;
+
         clearButton = createButton("Wyczyść", e -> drawingPanel.clear(), 
-            startX, startY, (buttonWidth - gap) / 2, buttonHeight);
+            rightPanelX, startY, buttonWidth, buttonHeight);
             
         recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing(), 
-            startX + (buttonWidth - gap) / 2 + gap, startY, (buttonWidth - gap) / 2, buttonHeight);
+            rightPanelX + buttonWidth + gap, startY, buttonWidth, buttonHeight);
         
         add(clearButton);
         add(recognizeButton);
+
+        createRadioButtons(rightPanelX, startY + buttonHeight + gap);
+        createBottomButtons(rightPanelX, startY + buttonHeight + gap + 80);
         
-        // Now create radio buttons BETWEEN the button rows
-        createRadioButtons(startX, startY + buttonHeight + 10);
-        
-        // Then create the bottom buttons
-        createBottomButtons(startX, startY + buttonHeight + 80); // Added extra vertical space
-        
-        // Create accuracy panel at the bottom of the window
-        createAccuracyPanel();
+        // Передаємо centerGap для врахування у нижній панелі
+        createAccuracyPanel(margin, centerGap);
     }
     
-    private void createDrawingPanel() {
+    private void createDrawingPanel(int margin) {
         drawingPanel = new DrawingPanel();
-        drawingPanel.setBounds(20, 20, CANVAS_SIZE, CANVAS_SIZE);
+        drawingPanel.setBounds(margin, margin, CANVAS_SIZE, CANVAS_SIZE); // Use consistent margin
         add(drawingPanel);
     }
     
-    private void createResultLabel() {
+    private void createResultLabel(int rightPanelX, int rightPanelWidth, int margin) {
         resultLabel = new JLabel("<html>Narysuj literę (M, O lub N)</html>");
         resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 18));
-        resultLabel.setBounds(CANVAS_SIZE + 40, 20, 250, 80);
+        resultLabel.setFont(new Font(resultLabel.getFont().getName(), Font.BOLD, 20));
+        
+        // Змінюємо ширину мітки, щоб дорівнювала CANVAS_SIZE
+        resultLabel.setBounds(rightPanelX, margin, rightPanelWidth, 80);
         add(resultLabel);
     }
     
-    private void createAccuracyPanel() {
-        // Create panel for training data accuracy (left side)
+    private void createAccuracyPanel(int margin, int centerGap) {
+        // Встановлюємо ширину панелей рівною ширині квадрата для малювання
+        int panelWidth = CANVAS_SIZE; // Змінено з CANVAS_SIZE - centerGap/2 на повний розмір CANVAS_SIZE
+        int panelHeight = 160;
+        int startY = CANVAS_SIZE + 60;
+        
+        // Ліва панель
         JPanel trainingAccuracyPanel = new JPanel(new BorderLayout());
         trainingAccuracyPanel.setBorder(BorderFactory.createTitledBorder("Dokładność na danych treningowych"));
-        trainingAccuracyPanel.setBounds(20, CANVAS_SIZE + 40, (CANVAS_SIZE + 380) / 2 - 10, 160);
+        trainingAccuracyPanel.setBounds(margin, startY, panelWidth, panelHeight);
         
-        trainingAccuracyTextArea = new JTextArea();
-        trainingAccuracyTextArea.setEditable(false);
-        trainingAccuracyTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        trainingAccuracyTextArea.setBackground(new Color(240, 240, 240));
-        
+        trainingAccuracyTextArea = createAccuracyTextArea();
         JScrollPane trainingScrollPane = new JScrollPane(trainingAccuracyTextArea);
         trainingAccuracyPanel.add(trainingScrollPane, BorderLayout.CENTER);
         
-        // Create panel for test data accuracy (right side)
+        // Права панель з додатковим відступом
         JPanel testAccuracyPanel = new JPanel(new BorderLayout());
         testAccuracyPanel.setBorder(BorderFactory.createTitledBorder("Dokładność na danych testowych"));
-        testAccuracyPanel.setBounds(20 + (CANVAS_SIZE + 380) / 2 + 10, CANVAS_SIZE + 40, 
-                                   (CANVAS_SIZE + 380) / 2 - 10, 160);
+        // Додаємо centerGap, щоб відсунути праву панель
+        testAccuracyPanel.setBounds(CANVAS_SIZE + margin + centerGap, startY, panelWidth, panelHeight);
         
-        testAccuracyTextArea = new JTextArea();
-        testAccuracyTextArea.setEditable(false);
-        testAccuracyTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        testAccuracyTextArea.setBackground(new Color(240, 240, 240));
-        
+        testAccuracyTextArea = createAccuracyTextArea();
         JScrollPane testScrollPane = new JScrollPane(testAccuracyTextArea);
         testAccuracyPanel.add(testScrollPane, BorderLayout.CENTER);
         
@@ -146,37 +151,41 @@ public class RecognizerApp extends JFrame {
         add(testAccuracyPanel);
     }
     
+    private JTextArea createAccuracyTextArea() {
+        JTextArea textArea = new JTextArea();
+        textArea.setEditable(false);
+        textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        textArea.setBackground(new Color(240, 240, 240));
+        return textArea;
+    }
+    
     private void createRadioButtons(int startX, int yPos) {
-        // Create a panel for radio buttons
         JPanel radioPanel = new JPanel();
-        radioPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 20, 0));
+        radioPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 30, 10));
         radioPanel.setBorder(BorderFactory.createTitledBorder("Wybierz literę"));
-        radioPanel.setBounds(startX, yPos, 250, 60);
+
+        int panelWidth = CANVAS_SIZE; // Make panel width match canvas width
+        radioPanel.setBounds(startX, yPos, panelWidth, 70);
         
-        // Create radio buttons
         radioM = new JRadioButton("M");
         radioO = new JRadioButton("O");
         radioN = new JRadioButton("N");
         
-        // Set font and size
-        Font radioFont = new Font(radioM.getFont().getName(), Font.BOLD, 16);
+        Font radioFont = new Font(radioM.getFont().getName(), Font.BOLD, 20); // Larger font
         radioM.setFont(radioFont);
         radioO.setFont(radioFont);
         radioN.setFont(radioFont);
         
-        // Group radio buttons to ensure only one is selected
         letterGroup = new ButtonGroup();
         letterGroup.add(radioM);
         letterGroup.add(radioO);
         letterGroup.add(radioN);
         
-        // Add action listener to enable/disable buttons
         ActionListener radioListener = e -> updateButtonStates();
         radioM.addActionListener(radioListener);
         radioO.addActionListener(radioListener);
         radioN.addActionListener(radioListener);
         
-        // Add radio buttons to panel
         radioPanel.add(radioM);
         radioPanel.add(radioO);
         radioPanel.add(radioN);
@@ -185,18 +194,16 @@ public class RecognizerApp extends JFrame {
     }
     
     private void createBottomButtons(int startX, int startY) {
-        int buttonWidth = 250;
-        int buttonHeight = 50;
-        int gap = 10;
-        
-        // Create the bottom buttons (add to training/testing)
+        int buttonWidth = CANVAS_SIZE; // Make buttons the same width as canvas
+        int buttonHeight = 60;
+        int gap = 15;
+
         addToTrainingButton = createButton("Dodaj do ciągu uczącego", 
             e -> addToDataset(DATA_DIR), startX, startY, buttonWidth, buttonHeight);
         
         addToTestingButton = createButton("Dodaj do ciągu testowego", 
             e -> addToDataset(TEST_DATA_DIR), startX, startY + buttonHeight + gap, buttonWidth, buttonHeight);
         
-        // Initially disable the add buttons until a radio button is selected
         addToTrainingButton.setEnabled(false);
         addToTestingButton.setEnabled(false);
         
@@ -206,7 +213,7 @@ public class RecognizerApp extends JFrame {
     
     private JButton createButton(String text, ActionListener action, int x, int y, int width, int height) {
         JButton button = new JButton(text);
-        button.setFont(new Font(button.getFont().getName(), Font.BOLD, 14));
+        button.setFont(new Font(button.getFont().getName(), Font.BOLD, 16)); // Larger font for all buttons
         button.setMargin(new Insets(10, 10, 10, 10));
         button.addActionListener(action);
         button.setBounds(x, y, width, height);
@@ -227,7 +234,7 @@ public class RecognizerApp extends JFrame {
         if (radioM.isSelected()) return 'M';
         if (radioO.isSelected()) return 'O';
         if (radioN.isSelected()) return 'N';
-        return ' '; // This shouldn't happen if buttons are properly disabled
+        return ' ';
     }
     
     private void addToDataset(String dirName) {
@@ -247,14 +254,12 @@ public class RecognizerApp extends JFrame {
         try {
             neuralNetwork = new NeuralNetwork();
             neuralNetwork.loadModel(MODEL_PATH);
-            System.out.println("Model został pomyślnie załadowany");
             return true;
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, 
                 "Błąd ładowania modelu: " + e.getMessage() + 
                 "\n\nAplikacja zostanie zamknięta.", 
                 "Błąd krytyczny", JOptionPane.ERROR_MESSAGE);
-            System.err.println("Błąd ładowania modelu: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -330,6 +335,13 @@ public class RecognizerApp extends JFrame {
                 "Sukces", JOptionPane.INFORMATION_MESSAGE);
                 
             resultLabel.setText("Zapisano jako " + fileName);
+            
+            if(dirName.equals(DATA_DIR)) {
+                evaluateModel(DATA_DIR, trainingAccuracyTextArea);
+            } else if(dirName.equals(TEST_DATA_DIR)) {
+                evaluateModel(TEST_DATA_DIR, testAccuracyTextArea);
+            }
+            
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                 "Błąd podczas zapisywania: " + e.getMessage(),
@@ -379,24 +391,22 @@ public class RecognizerApp extends JFrame {
         }
     }
 
-    private void evaluateModelOnTrainingData() {
+    private void evaluateModel(String dirPath, JTextArea outputArea) {
         if (neuralNetwork == null) {
-            trainingAccuracyTextArea.setText("Model nie został załadowany");
+            outputArea.setText("Model nie został załadowany");
             return;
         }
         
-        // Load training samples
-        List<Sample> trainingSamples = loadTrainingSamples();
-        if (trainingSamples.isEmpty()) {
-            trainingAccuracyTextArea.setText("Brak danych treningowych w folderze " + DATA_DIR);
+        List<Sample> samples = loadSamples(dirPath);
+        if (samples.isEmpty()) {
+            outputArea.setText("Brak danych w folderze " + dirPath);
             return;
         }
         
-        // Calculate accuracy using the same structure as the test data method
         int[] correctPredictions = new int[LETTERS.length];
         int[] totalSamples = new int[LETTERS.length];
         
-        for (Sample sample : trainingSamples) {
+        for (Sample sample : samples) {
             double[] prediction = neuralNetwork.predict(sample.getInput());
             int predictedIndex = findMaxIndex(prediction);
             int targetIndex = findMaxIndex(sample.getTarget());
@@ -407,12 +417,10 @@ public class RecognizerApp extends JFrame {
             }
         }
         
-        // Calculate overall accuracy
         int totalCorrect = Arrays.stream(correctPredictions).sum();
         int total = Arrays.stream(totalSamples).sum();
         double overallAccuracy = total > 0 ? (double) totalCorrect / total * 100 : 0;
         
-        // Display results
         StringBuilder sb = new StringBuilder();
         sb.append("Dokładność rozpoznawania:\n");
         sb.append(String.format("Ogólna: %.2f%% (%d/%d)\n", 
@@ -425,61 +433,12 @@ public class RecognizerApp extends JFrame {
                     LETTERS[i], accuracy, correctPredictions[i], totalSamples[i]));
         }
         
-        trainingAccuracyTextArea.setText(sb.toString());
+        outputArea.setText(sb.toString());
     }
 
-    private void evaluateModelOnTestData() {
-        if (neuralNetwork == null) {
-            testAccuracyTextArea.setText("Model nie został załadowany");
-            return;
-        }
-        
-        // Load test samples
-        List<Sample> testSamples = loadTestSamples();
-        if (testSamples.isEmpty()) {
-            testAccuracyTextArea.setText("Brak danych testowych w folderze " + TEST_DATA_DIR);
-            return;
-        }
-        
-        // Calculate accuracy
-        int[] correctPredictions = new int[LETTERS.length];
-        int[] totalSamples = new int[LETTERS.length];
-        
-        for (Sample sample : testSamples) {
-            double[] prediction = neuralNetwork.predict(sample.getInput());
-            int predictedIndex = findMaxIndex(prediction);
-            int targetIndex = findMaxIndex(sample.getTarget());
-            
-            totalSamples[targetIndex]++;
-            if (predictedIndex == targetIndex) {
-                correctPredictions[targetIndex]++;
-            }
-        }
-        
-        // Calculate overall accuracy
-        int totalCorrect = Arrays.stream(correctPredictions).sum();
-        int total = Arrays.stream(totalSamples).sum();
-        double overallAccuracy = total > 0 ? (double) totalCorrect / total * 100 : 0;
-        
-        // Display results
-        StringBuilder sb = new StringBuilder();
-        sb.append("Dokładność rozpoznawania:\n");
-        sb.append(String.format("Ogólna: %.2f%% (%d/%d poprawnych)\n", 
-                overallAccuracy, totalCorrect, total));
-        
-        for (int i = 0; i < LETTERS.length; i++) {
-            double accuracy = totalSamples[i] > 0 ? 
-                (double) correctPredictions[i] / totalSamples[i] * 100 : 0;
-            sb.append(String.format("Litera %c: %.2f%% (%d/%d poprawnych)\n", 
-                    LETTERS[i], accuracy, correctPredictions[i], totalSamples[i]));
-        }
-        
-        testAccuracyTextArea.setText(sb.toString());
-    }
-    
-    private List<Sample> loadTrainingSamples() {
+    private List<Sample> loadSamples(String dirPath) {
         List<Sample> samples = new ArrayList<>();
-        File dataDir = new File(DATA_DIR);
+        File dataDir = new File(dirPath);
         
         if (!dataDir.exists() || !dataDir.isDirectory()) {
             return samples;
@@ -509,82 +468,29 @@ public class RecognizerApp extends JFrame {
                     default: continue;
                 }
                 
-                String content = new String(Files.readAllBytes(file.toPath()));
-                String[] values = content.trim().split(",");
-                
-                if (values.length != 784) {
-                    continue;
-                }
-                
-                double[] input = new double[values.length];
-                for (int i = 0; i < values.length; i++) {
-                    input[i] = Double.parseDouble(values[i]);
-                }
+                double[] input = parseCsvFile(file);
+                if (input.length != 784) continue;
                 
                 samples.add(new Sample(input, target));
                 
             } catch (Exception e) {
-                System.err.println("Error loading training sample: " + e.getMessage());
+
             }
         }
         
-        System.out.println("Loaded " + samples.size() + " training samples");
         return samples;
     }
-
-    private List<Sample> loadTestSamples() {
-        List<Sample> samples = new ArrayList<>();
-        File testDir = new File(TEST_DATA_DIR);
+    
+    private double[] parseCsvFile(File file) throws IOException {
+        String content = new String(Files.readAllBytes(file.toPath()));
+        String[] values = content.trim().split(",");
+        double[] input = new double[values.length];
         
-        if (!testDir.exists() || !testDir.isDirectory()) {
-            return samples;
+        for (int i = 0; i < values.length; i++) {
+            input[i] = Double.parseDouble(values[i]);
         }
         
-        File[] files = testDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
-        
-        if (files == null || files.length == 0) {
-            return samples;
-        }
-        
-        Pattern pattern = Pattern.compile("([MON])_(\\d+)\\.csv");
-        
-        for (File file : files) {
-            try {
-                Matcher matcher = pattern.matcher(file.getName());
-                if (!matcher.matches()) {
-                    continue;
-                }
-                
-                char letter = matcher.group(1).charAt(0);
-                double[] target = new double[3];
-                switch (letter) {
-                    case 'M': target[0] = 1.0; break;
-                    case 'O': target[1] = 1.0; break;
-                    case 'N': target[2] = 1.0; break;
-                    default: continue;
-                }
-                
-                String content = new String(Files.readAllBytes(file.toPath()));
-                String[] values = content.trim().split(",");
-                
-                if (values.length != 784) {
-                    continue;
-                }
-                
-                double[] input = new double[values.length];
-                for (int i = 0; i < values.length; i++) {
-                    input[i] = Double.parseDouble(values[i]);
-                }
-                
-                samples.add(new Sample(input, target));
-                
-            } catch (Exception e) {
-                System.err.println("Error loading test sample: " + e.getMessage());
-            }
-        }
-        
-        System.out.println("Loaded " + samples.size() + " test samples");
-        return samples;
+        return input;
     }
 
     private class DrawingPanel extends JPanel {
@@ -710,3 +616,4 @@ public class RecognizerApp extends JFrame {
         }
     }
 }
+

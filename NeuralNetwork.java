@@ -47,7 +47,7 @@ public class NeuralNetwork {
     }
     
     public void setDropoutRate(double rate) {
-        if (rate < 0.0 || rate >= 1.0) throw new IllegalArgumentException("Dropout must be between 0 and 1");
+        if (rate < 0.0 || rate >= 1.0) throw new IllegalArgumentException("Dropout musi być pomiędzy 0 a 1");
         this.dropoutRate = rate;
     }
 
@@ -56,7 +56,7 @@ public class NeuralNetwork {
     }
 
     public void setValidationSplit(double ratio) {
-        if (ratio <= 0.0 || ratio >= 1.0) throw new IllegalArgumentException("Validation split must be between 0 and 1");
+        if (ratio <= 0.0 || ratio >= 1.0) throw new IllegalArgumentException("Współczynnik walidacji musi być pomiędzy 0 a 1");
         this.validationSplit = ratio;
     }
 
@@ -461,15 +461,15 @@ public class NeuralNetwork {
         for (Sample sample : trainingData) {
             augmentedData.add(sample);
 
-            double[] target = sample.getTarget();
-            for (int i = 0; i < target.length; i++) {
-                if (target[i] > 0.5) {
+            int classIndex = -1;
+            for (int i = 0; i < sample.getTarget().length; i++) {
+                if (sample.getTarget()[i] > 0.5) {
+                    classIndex = i;
                     break;
                 }
             }
 
             int numAugmentations = ThreadLocalRandom.current().nextInt(10, 16);
-            
             for (int i = 0; i < numAugmentations; i++) {
                 augmentedData.add(augmentSample(sample));
             }
