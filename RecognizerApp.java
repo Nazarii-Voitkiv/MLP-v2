@@ -4,21 +4,29 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.*;
+import java.util.*;
+import java.util.List;
 import java.util.regex.*;
 
 public class RecognizerApp extends JFrame {
-    private static final int CANVAS_SIZE = 280;
+    private static final int CANVAS_SIZE = 420; // Increased from 280
     private static final int PIXEL_SIZE = 28;
     private static final int INTERNAL_PIXEL_SIZE = 56;
     private static final String MODEL_PATH = "model.dat";
     private static final String DATA_DIR = "data";
-    private static final String[] LETTER_OPTIONS = {"M", "O", "N"};
+    private static final String TEST_DATA_DIR = "test_data";
     private static final char[] LETTERS = {'M', 'O', 'N'};
 
     private DrawingPanel drawingPanel;
     private JLabel resultLabel;
-    private JButton recognizeButton, clearButton, wrongLetterButton;
+    private JTextArea trainingAccuracyTextArea; // New field for training accuracy
+    private JTextArea testAccuracyTextArea;     // Renamed from accuracyTextArea
+    private JButton recognizeButton, clearButton, addToTrainingButton, addToTestingButton;
     private NeuralNetwork neuralNetwork;
+
+    // Radio buttons for letter selection
+    private JRadioButton radioM, radioO, radioN;
+    private ButtonGroup letterGroup;
 
     public static void main(String[] args) {
         try {
@@ -40,10 +48,10 @@ public class RecognizerApp extends JFrame {
     }
 
     public RecognizerApp() {
-        setTitle("Rozpoznawanie liter");
+        setTitle("Rozpoznawanie liter M O N");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(null);
-        setSize(CANVAS_SIZE + 320, CANVAS_SIZE + 80);
+        setSize(CANVAS_SIZE + 420, CANVAS_SIZE + 250); // Increased height further to accommodate panel at bottom
         setLocationRelativeTo(null);
         setResizable(false);
         
@@ -53,13 +61,43 @@ public class RecognizerApp extends JFrame {
         }
 
         initializeUI();
+        
+        // Run model evaluation on both datasets
+        evaluateModelOnTrainingData();
+        evaluateModelOnTestData();
+        
         setVisible(true);
     }
     
     private void initializeUI() {
         createDrawingPanel();
         createResultLabel();
-        createButtons();
+        
+        // First create the top row buttons
+        int buttonWidth = 250;
+        int buttonHeight = 50;
+        int startX = CANVAS_SIZE + 40;
+        int startY = CANVAS_SIZE - 250;
+        int gap = 20;
+        
+        // First row - two buttons side by side
+        clearButton = createButton("Wyczyść", e -> drawingPanel.clear(), 
+            startX, startY, (buttonWidth - gap) / 2, buttonHeight);
+            
+        recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing(), 
+            startX + (buttonWidth - gap) / 2 + gap, startY, (buttonWidth - gap) / 2, buttonHeight);
+        
+        add(clearButton);
+        add(recognizeButton);
+        
+        // Now create radio buttons BETWEEN the button rows
+        createRadioButtons(startX, startY + buttonHeight + 10);
+        
+        // Then create the bottom buttons
+        createBottomButtons(startX, startY + buttonHeight + 80); // Added extra vertical space
+        
+        // Create accuracy panel at the bottom of the window
+        createAccuracyPanel();
     }
     
     private void createDrawingPanel() {
@@ -76,23 +114,133 @@ public class RecognizerApp extends JFrame {
         add(resultLabel);
     }
     
-    private void createButtons() {
-        recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing(), CANVAS_SIZE + 40, CANVAS_SIZE - 180);
-        clearButton = createButton("Wyczyść", e -> drawingPanel.clear(), CANVAS_SIZE + 40, CANVAS_SIZE - 120);
-        wrongLetterButton = createButton("❌ To nie ta litera", e -> handleWrongLetter(), CANVAS_SIZE + 40, CANVAS_SIZE - 60);
+    private void createAccuracyPanel() {
+        // Create panel for training data accuracy (left side)
+        JPanel trainingAccuracyPanel = new JPanel(new BorderLayout());
+        trainingAccuracyPanel.setBorder(BorderFactory.createTitledBorder("Dokładność na danych treningowych"));
+        trainingAccuracyPanel.setBounds(20, CANVAS_SIZE + 40, (CANVAS_SIZE + 380) / 2 - 10, 160);
         
-        add(recognizeButton);
-        add(clearButton);
-        //add(wrongLetterButton);
+        trainingAccuracyTextArea = new JTextArea();
+        trainingAccuracyTextArea.setEditable(false);
+        trainingAccuracyTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        trainingAccuracyTextArea.setBackground(new Color(240, 240, 240));
+        
+        JScrollPane trainingScrollPane = new JScrollPane(trainingAccuracyTextArea);
+        trainingAccuracyPanel.add(trainingScrollPane, BorderLayout.CENTER);
+        
+        // Create panel for test data accuracy (right side)
+        JPanel testAccuracyPanel = new JPanel(new BorderLayout());
+        testAccuracyPanel.setBorder(BorderFactory.createTitledBorder("Dokładność na danych testowych"));
+        testAccuracyPanel.setBounds(20 + (CANVAS_SIZE + 380) / 2 + 10, CANVAS_SIZE + 40, 
+                                   (CANVAS_SIZE + 380) / 2 - 10, 160);
+        
+        testAccuracyTextArea = new JTextArea();
+        testAccuracyTextArea.setEditable(false);
+        testAccuracyTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        testAccuracyTextArea.setBackground(new Color(240, 240, 240));
+        
+        JScrollPane testScrollPane = new JScrollPane(testAccuracyTextArea);
+        testAccuracyPanel.add(testScrollPane, BorderLayout.CENTER);
+        
+        add(trainingAccuracyPanel);
+        add(testAccuracyPanel);
     }
     
-    private JButton createButton(String text, ActionListener action, int x, int y) {
+    private void createRadioButtons(int startX, int yPos) {
+        // Create a panel for radio buttons
+        JPanel radioPanel = new JPanel();
+        radioPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 20, 0));
+        radioPanel.setBorder(BorderFactory.createTitledBorder("Wybierz literę"));
+        radioPanel.setBounds(startX, yPos, 250, 60);
+        
+        // Create radio buttons
+        radioM = new JRadioButton("M");
+        radioO = new JRadioButton("O");
+        radioN = new JRadioButton("N");
+        
+        // Set font and size
+        Font radioFont = new Font(radioM.getFont().getName(), Font.BOLD, 16);
+        radioM.setFont(radioFont);
+        radioO.setFont(radioFont);
+        radioN.setFont(radioFont);
+        
+        // Group radio buttons to ensure only one is selected
+        letterGroup = new ButtonGroup();
+        letterGroup.add(radioM);
+        letterGroup.add(radioO);
+        letterGroup.add(radioN);
+        
+        // Add action listener to enable/disable buttons
+        ActionListener radioListener = e -> updateButtonStates();
+        radioM.addActionListener(radioListener);
+        radioO.addActionListener(radioListener);
+        radioN.addActionListener(radioListener);
+        
+        // Add radio buttons to panel
+        radioPanel.add(radioM);
+        radioPanel.add(radioO);
+        radioPanel.add(radioN);
+        
+        add(radioPanel);
+    }
+    
+    private void createBottomButtons(int startX, int startY) {
+        int buttonWidth = 250;
+        int buttonHeight = 50;
+        int gap = 10;
+        
+        // Create the bottom buttons (add to training/testing)
+        addToTrainingButton = createButton("Dodaj do ciągu uczącego", 
+            e -> addToDataset(DATA_DIR), startX, startY, buttonWidth, buttonHeight);
+        
+        addToTestingButton = createButton("Dodaj do ciągu testowego", 
+            e -> addToDataset(TEST_DATA_DIR), startX, startY + buttonHeight + gap, buttonWidth, buttonHeight);
+        
+        // Initially disable the add buttons until a radio button is selected
+        addToTrainingButton.setEnabled(false);
+        addToTestingButton.setEnabled(false);
+        
+        add(addToTrainingButton);
+        add(addToTestingButton);
+    }
+    
+    private JButton createButton(String text, ActionListener action, int x, int y, int width, int height) {
         JButton button = new JButton(text);
         button.setFont(new Font(button.getFont().getName(), Font.BOLD, 14));
         button.setMargin(new Insets(10, 10, 10, 10));
         button.addActionListener(action);
-        button.setBounds(x, y, 250, 50);
+        button.setBounds(x, y, width, height);
         return button;
+    }
+    
+    private JButton createButton(String text, ActionListener action, int x, int y) {
+        return createButton(text, action, x, y, 250, 50);
+    }
+    
+    private void updateButtonStates() {
+        boolean isLetterSelected = radioM.isSelected() || radioO.isSelected() || radioN.isSelected();
+        addToTrainingButton.setEnabled(isLetterSelected);
+        addToTestingButton.setEnabled(isLetterSelected);
+    }
+    
+    private char getSelectedLetter() {
+        if (radioM.isSelected()) return 'M';
+        if (radioO.isSelected()) return 'O';
+        if (radioN.isSelected()) return 'N';
+        return ' '; // This shouldn't happen if buttons are properly disabled
+    }
+    
+    private void addToDataset(String dirName) {
+        double[] imageData = drawingPanel.getBinarizedImage();
+        if (!hasDrawing(imageData)) {
+            JOptionPane.showMessageDialog(this, 
+                "Nie ma nic do zapisania. Najpierw narysuj literę.", 
+                "Błąd", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        char letter = getSelectedLetter();
+        saveDrawingAsSample(letter, imageData, dirName);
     }
     
     private boolean loadNeuralNetwork() {
@@ -155,27 +303,6 @@ public class RecognizerApp extends JFrame {
         if (value >= 0.45) return "Niska pewność";
         return "Bardzo niska pewność";
     }
-
-    private void handleWrongLetter() {
-        double[] imageData = drawingPanel.getBinarizedImage();
-        if (!hasDrawing(imageData)) {
-            JOptionPane.showMessageDialog(this, 
-                "Nie ma nic do zapisania. Najpierw narysuj literę.", 
-                "Błąd", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        int choice = JOptionPane.showOptionDialog(this,
-            "Jaka to była litera?", "Wybierz właściwą opcję",
-            JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE,
-            null, LETTER_OPTIONS, LETTER_OPTIONS[0]);
-            
-        if (choice == JOptionPane.CLOSED_OPTION) {
-            return;
-        }
-
-        saveDrawingAsSample(LETTERS[choice], imageData);
-    }
     
     private boolean hasDrawing(double[] imageData) {
         for (double pixel : imageData) {
@@ -186,11 +313,17 @@ public class RecognizerApp extends JFrame {
         return false;
     }
     
-    private void saveDrawingAsSample(char letter, double[] imageData) {
+    private void saveDrawingAsSample(char letter, double[] imageData, String dirName) {
         try {
             imageData = ImageProcessor.centerImage(imageData);
-            String fileName = generateUniqueFileName(letter);
-            saveToCSV(imageData, fileName);
+            
+            File dir = new File(dirName);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            
+            String fileName = generateUniqueFileName(letter, dirName);
+            saveToCSV(imageData, fileName, dirName);
 
             JOptionPane.showMessageDialog(this,
                 "✅ Zapisano przykład jako " + fileName,
@@ -205,9 +338,9 @@ public class RecognizerApp extends JFrame {
         }
     }
     
-    private String generateUniqueFileName(char letter) {
+    private String generateUniqueFileName(char letter, String dirName) {
         int maxNumber = 0;
-        File dataDir = new File(DATA_DIR);
+        File dataDir = new File(dirName);
 
         if (!dataDir.exists()) {
             dataDir.mkdirs();
@@ -229,8 +362,8 @@ public class RecognizerApp extends JFrame {
         return String.format("%c_%03d.csv", letter, maxNumber + 1);
     }
 
-    private void saveToCSV(double[] data, String fileName) throws IOException {
-        File file = new File(DATA_DIR, fileName);
+    private void saveToCSV(double[] data, String fileName, String dirName) throws IOException {
+        File file = new File(dirName, fileName);
         
         try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             StringBuilder sb = new StringBuilder();
@@ -244,6 +377,214 @@ public class RecognizerApp extends JFrame {
             
             writer.write(sb.toString());
         }
+    }
+
+    private void evaluateModelOnTrainingData() {
+        if (neuralNetwork == null) {
+            trainingAccuracyTextArea.setText("Model nie został załadowany");
+            return;
+        }
+        
+        // Load training samples
+        List<Sample> trainingSamples = loadTrainingSamples();
+        if (trainingSamples.isEmpty()) {
+            trainingAccuracyTextArea.setText("Brak danych treningowych w folderze " + DATA_DIR);
+            return;
+        }
+        
+        // Calculate accuracy using the same structure as the test data method
+        int[] correctPredictions = new int[LETTERS.length];
+        int[] totalSamples = new int[LETTERS.length];
+        
+        for (Sample sample : trainingSamples) {
+            double[] prediction = neuralNetwork.predict(sample.getInput());
+            int predictedIndex = findMaxIndex(prediction);
+            int targetIndex = findMaxIndex(sample.getTarget());
+            
+            totalSamples[targetIndex]++;
+            if (predictedIndex == targetIndex) {
+                correctPredictions[targetIndex]++;
+            }
+        }
+        
+        // Calculate overall accuracy
+        int totalCorrect = Arrays.stream(correctPredictions).sum();
+        int total = Arrays.stream(totalSamples).sum();
+        double overallAccuracy = total > 0 ? (double) totalCorrect / total * 100 : 0;
+        
+        // Display results
+        StringBuilder sb = new StringBuilder();
+        sb.append("Dokładność rozpoznawania:\n");
+        sb.append(String.format("Ogólna: %.2f%% (%d/%d)\n", 
+                overallAccuracy, totalCorrect, total));
+        
+        for (int i = 0; i < LETTERS.length; i++) {
+            double accuracy = totalSamples[i] > 0 ? 
+                (double) correctPredictions[i] / totalSamples[i] * 100 : 0;
+            sb.append(String.format("Litera %c: %.2f%% (%d/%d)\n", 
+                    LETTERS[i], accuracy, correctPredictions[i], totalSamples[i]));
+        }
+        
+        trainingAccuracyTextArea.setText(sb.toString());
+    }
+
+    private void evaluateModelOnTestData() {
+        if (neuralNetwork == null) {
+            testAccuracyTextArea.setText("Model nie został załadowany");
+            return;
+        }
+        
+        // Load test samples
+        List<Sample> testSamples = loadTestSamples();
+        if (testSamples.isEmpty()) {
+            testAccuracyTextArea.setText("Brak danych testowych w folderze " + TEST_DATA_DIR);
+            return;
+        }
+        
+        // Calculate accuracy
+        int[] correctPredictions = new int[LETTERS.length];
+        int[] totalSamples = new int[LETTERS.length];
+        
+        for (Sample sample : testSamples) {
+            double[] prediction = neuralNetwork.predict(sample.getInput());
+            int predictedIndex = findMaxIndex(prediction);
+            int targetIndex = findMaxIndex(sample.getTarget());
+            
+            totalSamples[targetIndex]++;
+            if (predictedIndex == targetIndex) {
+                correctPredictions[targetIndex]++;
+            }
+        }
+        
+        // Calculate overall accuracy
+        int totalCorrect = Arrays.stream(correctPredictions).sum();
+        int total = Arrays.stream(totalSamples).sum();
+        double overallAccuracy = total > 0 ? (double) totalCorrect / total * 100 : 0;
+        
+        // Display results
+        StringBuilder sb = new StringBuilder();
+        sb.append("Dokładność rozpoznawania:\n");
+        sb.append(String.format("Ogólna: %.2f%% (%d/%d poprawnych)\n", 
+                overallAccuracy, totalCorrect, total));
+        
+        for (int i = 0; i < LETTERS.length; i++) {
+            double accuracy = totalSamples[i] > 0 ? 
+                (double) correctPredictions[i] / totalSamples[i] * 100 : 0;
+            sb.append(String.format("Litera %c: %.2f%% (%d/%d poprawnych)\n", 
+                    LETTERS[i], accuracy, correctPredictions[i], totalSamples[i]));
+        }
+        
+        testAccuracyTextArea.setText(sb.toString());
+    }
+    
+    private List<Sample> loadTrainingSamples() {
+        List<Sample> samples = new ArrayList<>();
+        File dataDir = new File(DATA_DIR);
+        
+        if (!dataDir.exists() || !dataDir.isDirectory()) {
+            return samples;
+        }
+        
+        File[] files = dataDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
+        
+        if (files == null || files.length == 0) {
+            return samples;
+        }
+        
+        Pattern pattern = Pattern.compile("([MON])_(\\d+)\\.csv");
+        
+        for (File file : files) {
+            try {
+                Matcher matcher = pattern.matcher(file.getName());
+                if (!matcher.matches()) {
+                    continue;
+                }
+                
+                char letter = matcher.group(1).charAt(0);
+                double[] target = new double[3];
+                switch (letter) {
+                    case 'M': target[0] = 1.0; break;
+                    case 'O': target[1] = 1.0; break;
+                    case 'N': target[2] = 1.0; break;
+                    default: continue;
+                }
+                
+                String content = new String(Files.readAllBytes(file.toPath()));
+                String[] values = content.trim().split(",");
+                
+                if (values.length != 784) {
+                    continue;
+                }
+                
+                double[] input = new double[values.length];
+                for (int i = 0; i < values.length; i++) {
+                    input[i] = Double.parseDouble(values[i]);
+                }
+                
+                samples.add(new Sample(input, target));
+                
+            } catch (Exception e) {
+                System.err.println("Error loading training sample: " + e.getMessage());
+            }
+        }
+        
+        System.out.println("Loaded " + samples.size() + " training samples");
+        return samples;
+    }
+
+    private List<Sample> loadTestSamples() {
+        List<Sample> samples = new ArrayList<>();
+        File testDir = new File(TEST_DATA_DIR);
+        
+        if (!testDir.exists() || !testDir.isDirectory()) {
+            return samples;
+        }
+        
+        File[] files = testDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".csv"));
+        
+        if (files == null || files.length == 0) {
+            return samples;
+        }
+        
+        Pattern pattern = Pattern.compile("([MON])_(\\d+)\\.csv");
+        
+        for (File file : files) {
+            try {
+                Matcher matcher = pattern.matcher(file.getName());
+                if (!matcher.matches()) {
+                    continue;
+                }
+                
+                char letter = matcher.group(1).charAt(0);
+                double[] target = new double[3];
+                switch (letter) {
+                    case 'M': target[0] = 1.0; break;
+                    case 'O': target[1] = 1.0; break;
+                    case 'N': target[2] = 1.0; break;
+                    default: continue;
+                }
+                
+                String content = new String(Files.readAllBytes(file.toPath()));
+                String[] values = content.trim().split(",");
+                
+                if (values.length != 784) {
+                    continue;
+                }
+                
+                double[] input = new double[values.length];
+                for (int i = 0; i < values.length; i++) {
+                    input[i] = Double.parseDouble(values[i]);
+                }
+                
+                samples.add(new Sample(input, target));
+                
+            } catch (Exception e) {
+                System.err.println("Error loading test sample: " + e.getMessage());
+            }
+        }
+        
+        System.out.println("Loaded " + samples.size() + " test samples");
+        return samples;
     }
 
     private class DrawingPanel extends JPanel {
