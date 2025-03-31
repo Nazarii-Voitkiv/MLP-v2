@@ -51,8 +51,6 @@ public class Trainer {
         
         net.train(balancedSamples, 300);
         saveModel(net);
-
-        calculateAndPrintAccuracy(net, samples);
     }
     
     private static List<Sample> balanceSamples(List<Sample> samples) {
@@ -105,37 +103,6 @@ public class Trainer {
             System.out.println("Model został zapisany do " + MODEL_PATH);
         } catch (IOException e) {
             System.err.println("Błąd podczas zapisywania modelu: " + e.getMessage());
-        }
-    }
-    
-    private static void calculateAndPrintAccuracy(NeuralNetwork net, List<Sample> samples) {
-        int[] correctPredictions = new int[LETTERS.length];
-        int[] totalSamples = new int[LETTERS.length];
-        
-        for (Sample sample : samples) {
-            double[] prediction = net.predict(sample.getInput());
-            int predictedIndex = findMaxIndex(prediction);
-            int targetIndex = findMaxIndex(sample.getTarget());
-            
-            totalSamples[targetIndex]++;
-            if (predictedIndex == targetIndex) {
-                correctPredictions[targetIndex]++;
-            }
-        }
-        
-        int totalCorrect = Arrays.stream(correctPredictions).sum();
-        int total = Arrays.stream(totalSamples).sum();
-        double overallAccuracy = (double) totalCorrect / total * 100;
-        
-        System.out.println("\nDokładność rozpoznawania:");
-        System.out.printf("Ogólna: %.2f%% (%d/%d poprawnych prognoz)\n", 
-                         overallAccuracy, totalCorrect, total);
-        
-        for (int i = 0; i < LETTERS.length; i++) {
-            double accuracy = totalSamples[i] > 0 ? 
-                (double) correctPredictions[i] / totalSamples[i] * 100 : 0;
-            System.out.printf("Litera %c: %.2f%% (%d/%d poprawnych)\n", 
-                             LETTERS[i], accuracy, correctPredictions[i], totalSamples[i]);
         }
     }
     

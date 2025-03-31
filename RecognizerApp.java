@@ -27,7 +27,7 @@ public class RecognizerApp extends JFrame {
             e.printStackTrace();
         }
 
-        if (!checkModelExists()) {
+        if (!new File(MODEL_PATH).exists()) {
             JOptionPane.showMessageDialog(null,
                 "Błąd: Nie znaleziono pliku modelu '" + MODEL_PATH + "'.\n\n" +
                 "Uruchom najpierw program Trainer, aby wytrenować i zapisać model.",
@@ -38,33 +38,25 @@ public class RecognizerApp extends JFrame {
         
         SwingUtilities.invokeLater(RecognizerApp::new);
     }
-    
-    private static boolean checkModelExists() {
-        return new File(MODEL_PATH).exists();
-    }
 
     public RecognizerApp() {
-        configureFrame();
-        
-        if (!loadNeuralNetwork()) {
-            dispose();
-            return;
-        }
-
-        createUI();
-        setVisible(true);
-    }
-    
-    private void configureFrame() {
         setTitle("Rozpoznawanie liter");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(null);
         setSize(CANVAS_SIZE + 320, CANVAS_SIZE + 80);
         setLocationRelativeTo(null);
         setResizable(false);
+        
+        if (!loadNeuralNetwork()) {
+            dispose();
+            return;
+        }
+
+        initializeUI();
+        setVisible(true);
     }
     
-    private void createUI() {
+    private void initializeUI() {
         createDrawingPanel();
         createResultLabel();
         createButtons();
@@ -85,24 +77,21 @@ public class RecognizerApp extends JFrame {
     }
     
     private void createButtons() {
-        recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing());
-        clearButton = createButton("Wyczyść", e -> drawingPanel.clear());
-        wrongLetterButton = createButton("❌ To nie ta litera", e -> handleWrongLetter());
-        
-        recognizeButton.setBounds(CANVAS_SIZE + 40, CANVAS_SIZE - 180, 250, 50);
-        clearButton.setBounds(CANVAS_SIZE + 40, CANVAS_SIZE - 120, 250, 50);
-        wrongLetterButton.setBounds(CANVAS_SIZE + 40, CANVAS_SIZE - 60, 250, 50);
+        recognizeButton = createButton("Rozpoznaj", e -> recognizeDrawing(), CANVAS_SIZE + 40, CANVAS_SIZE - 180);
+        clearButton = createButton("Wyczyść", e -> drawingPanel.clear(), CANVAS_SIZE + 40, CANVAS_SIZE - 120);
+        wrongLetterButton = createButton("❌ To nie ta litera", e -> handleWrongLetter(), CANVAS_SIZE + 40, CANVAS_SIZE - 60);
         
         add(recognizeButton);
         add(clearButton);
         add(wrongLetterButton);
     }
     
-    private JButton createButton(String text, ActionListener action) {
+    private JButton createButton(String text, ActionListener action, int x, int y) {
         JButton button = new JButton(text);
         button.setFont(new Font(button.getFont().getName(), Font.BOLD, 14));
         button.setMargin(new Insets(10, 10, 10, 10));
         button.addActionListener(action);
+        button.setBounds(x, y, 250, 50);
         return button;
     }
     
@@ -260,14 +249,15 @@ public class RecognizerApp extends JFrame {
     private class DrawingPanel extends JPanel {
         private BufferedImage image;
         private Graphics2D g2d;
+        private int lastX = -1, lastY = -1;
 
         public DrawingPanel() {
-            initializePanel();
-            initializeDrawingSurface();
+            initPanel();
+            initDrawingSurface();
             setupMouseHandlers();
         }
         
-        private void initializePanel() {
+        private void initPanel() {
             setPreferredSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
             setMinimumSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
             setMaximumSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
@@ -275,7 +265,7 @@ public class RecognizerApp extends JFrame {
             setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
         }
         
-        private void initializeDrawingSurface() {
+        private void initDrawingSurface() {
             image = new BufferedImage(INTERNAL_PIXEL_SIZE, INTERNAL_PIXEL_SIZE, BufferedImage.TYPE_BYTE_GRAY);
             g2d = image.createGraphics();
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -286,9 +276,6 @@ public class RecognizerApp extends JFrame {
         
         private void setupMouseHandlers() {
             MouseAdapter mouseHandler = new MouseAdapter() {
-                private int lastX = -1;
-                private int lastY = -1;
-                
                 @Override
                 public void mousePressed(MouseEvent e) {
                     lastX = e.getX();
@@ -349,14 +336,11 @@ public class RecognizerApp extends JFrame {
 
         public double[] getBinarizedImage() {
             double[] data = new double[PIXEL_SIZE * PIXEL_SIZE];
-
             for (int y = 0; y < PIXEL_SIZE; y++) {
                 for (int x = 0; x < PIXEL_SIZE; x++) {
-                    int sum = getPixelSum(x, y);
-                    data[y * PIXEL_SIZE + x] = (sum / 4 < 128) ? 1.0 : 0.0;
+                    data[y * PIXEL_SIZE + x] = (getPixelSum(x, y) / 4 < 128) ? 1.0 : 0.0;
                 }
             }
-
             return data;
         }
         

@@ -20,18 +20,18 @@ public class LetterDrawingApp extends JFrame {
     private JLabel statusLabel;
 
     public LetterDrawingApp() {
-        setTitle("Tworzenie próbek liter");  // Translated from Ukrainian
+        setTitle("Tworzenie próbek liter");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
 
         drawingPanel = new DrawingPanel();
 
-        saveAsM = new JButton("Zapisz jako M");  // Translated
-        saveAsO = new JButton("Zapisz jako O");  // Translated
-        saveAsN = new JButton("Zapisz jako N");  // Translated
-        clearButton = new JButton("Wyczyść");    // Translated
+        saveAsM = new JButton("Zapisz jako M");
+        saveAsO = new JButton("Zapisz jako O");
+        saveAsN = new JButton("Zapisz jako N");
+        clearButton = new JButton("Wyczyść");
 
-        statusLabel = new JLabel("Gotowy do rysowania"); // Translated
+        statusLabel = new JLabel("Gotowy do rysowania");
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
         saveAsM.addActionListener(e -> saveLetterImage('M'));
@@ -39,7 +39,6 @@ public class LetterDrawingApp extends JFrame {
         saveAsN.addActionListener(e -> saveLetterImage('N'));
         clearButton.addActionListener(e -> drawingPanel.clear());
 
-        // Używamy GridLayout dla lepszego rozmieszczenia przycisków
         JPanel buttonPanel = new JPanel(new GridLayout(2, 2, 5, 5));
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
         buttonPanel.add(saveAsM);
@@ -51,7 +50,6 @@ public class LetterDrawingApp extends JFrame {
         add(buttonPanel, BorderLayout.SOUTH);
         add(statusLabel, BorderLayout.NORTH);
 
-        // Zwiększamy rozmiar okna dla lepszego wyświetlania przycisków
         setSize(CANVAS_SIZE + 60, CANVAS_SIZE + 130);
         setLocationRelativeTo(null);
         setVisible(true);
@@ -64,9 +62,9 @@ public class LetterDrawingApp extends JFrame {
         if (!Files.exists(dataPath)) {
             try {
                 Files.createDirectory(dataPath);
-                statusLabel.setText("Utworzono katalog: " + DATA_DIR); // Translated
+                statusLabel.setText("Utworzono katalog: " + DATA_DIR);
             } catch (IOException e) {
-                statusLabel.setText("Błąd tworzenia katalogu: " + e.getMessage()); // Translated
+                statusLabel.setText("Błąd tworzenia katalogu: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -78,9 +76,9 @@ public class LetterDrawingApp extends JFrame {
 
         try {
             saveToCSV(imageData, fileName);
-            statusLabel.setText("Zapisano jako " + fileName); // Translated
+            statusLabel.setText("Zapisano jako " + fileName);
         } catch (IOException e) {
-            statusLabel.setText("Błąd zapisywania: " + e.getMessage()); // Translated
+            statusLabel.setText("Błąd zapisywania: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -162,7 +160,7 @@ public class LetterDrawingApp extends JFrame {
             g2d.fillRect(0, 0, PIXEL_SIZE, PIXEL_SIZE);
             g2d.setColor(Color.WHITE);
             repaint();
-            statusLabel.setText("Panel wyczyszczony"); // Translated
+            statusLabel.setText("Panel wyczyszczony");
         }
 
         public double[] getBinarizedImage() {

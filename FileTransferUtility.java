@@ -13,25 +13,11 @@ public class FileTransferUtility {
     public static void main(String[] args) {
         System.out.println("Przenoszenie plików z folderu " + SOURCE_DIR + " do folderu " + TARGET_DIR); // Translated
         
-        // Sprawdzanie istnienia katalogów
-        File sourceDir = new File(SOURCE_DIR);
-        File targetDir = new File(TARGET_DIR);
-        
-        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
-            System.err.println("Błąd: Folder " + SOURCE_DIR + " nie istnieje lub nie jest katalogiem."); // Translated
+        if (!validateDirectories()) {
             return;
         }
         
-        if (!targetDir.exists()) {
-            if (!targetDir.mkdirs()) {
-                System.err.println("Błąd: Nie udało się utworzyć folderu " + TARGET_DIR); // Translated
-                return;
-            }
-            System.out.println("Utworzono folder " + TARGET_DIR); // Translated
-        }
-        
-        // Pobieranie listy plików z katalogu źródłowego
-        File[] sourceFiles = sourceDir.listFiles(file -> file.isFile() && file.getName().endsWith(".csv"));
+        File[] sourceFiles = new File(SOURCE_DIR).listFiles(file -> file.isFile() && file.getName().endsWith(".csv"));
         
         if (sourceFiles == null || sourceFiles.length == 0) {
             System.out.println("W folderze " + SOURCE_DIR + " nie ma plików CSV do przeniesienia."); // Translated
@@ -40,11 +26,34 @@ public class FileTransferUtility {
         
         System.out.println("Znaleziono " + sourceFiles.length + " plików CSV do przeniesienia."); // Translated
         
-        // Słowniki do przechowywania maksymalnych indeksów dla każdej litery
-        Map<Character, Integer> maxNumbers = new HashMap<>();
+        Map<Character, Integer> maxNumbers = findMaxNumbers();
+        transferFiles(sourceFiles, maxNumbers);
+    }
+    
+    private static boolean validateDirectories() {
+        File sourceDir = new File(SOURCE_DIR);
+        File targetDir = new File(TARGET_DIR);
         
-        // Znalezienie istniejących maksymalnych indeksów w katalogu docelowym
-        File[] targetFiles = targetDir.listFiles(file -> file.isFile() && file.getName().endsWith(".csv"));
+        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
+            System.err.println("Błąd: Folder " + SOURCE_DIR + " nie istnieje lub nie jest katalogiem."); // Translated
+            return false;
+        }
+        
+        if (!targetDir.exists()) {
+            if (!targetDir.mkdirs()) {
+                System.err.println("Błąd: Nie udało się utworzyć folderu " + TARGET_DIR); // Translated
+                return false;
+            }
+            System.out.println("Utworzono folder " + TARGET_DIR); // Translated
+        }
+        
+        return true;
+    }
+    
+    private static Map<Character, Integer> findMaxNumbers() {
+        Map<Character, Integer> maxNumbers = new HashMap<>();
+        File[] targetFiles = new File(TARGET_DIR).listFiles(file -> file.isFile() && file.getName().endsWith(".csv"));
+        
         if (targetFiles != null) {
             Pattern pattern = Pattern.compile("([MON])_(\\d+)\\.csv");
             
@@ -53,33 +62,32 @@ public class FileTransferUtility {
                 if (matcher.matches()) {
                     char letter = matcher.group(1).charAt(0);
                     int number = Integer.parseInt(matcher.group(2));
-                    
                     maxNumbers.put(letter, Math.max(maxNumbers.getOrDefault(letter, 0), number));
                 }
             }
         }
         
-        // Przenoszenie i zmiana nazw plików
+        return maxNumbers;
+    }
+    
+    private static void transferFiles(File[] sourceFiles, Map<Character, Integer> maxNumbers) {
         int successCount = 0;
+        Pattern pattern = Pattern.compile("([MON])_(\\d+)\\.csv");
         
         for (File sourceFile : sourceFiles) {
             String fileName = sourceFile.getName();
-            Pattern pattern = Pattern.compile("([MON])_(\\d+)\\.csv");
             Matcher matcher = pattern.matcher(fileName);
             
             if (matcher.matches()) {
                 char letter = matcher.group(1).charAt(0);
                 
-                // Zwiększamy maksymalny indeks dla tej litery
                 int newNumber = maxNumbers.getOrDefault(letter, 0) + 1;
                 maxNumbers.put(letter, newNumber);
                 
-                // Tworzymy nową nazwę pliku
                 String newFileName = String.format("%c_%02d.csv", letter, newNumber);
-                File targetFile = new File(targetDir, newFileName);
+                File targetFile = new File(TARGET_DIR, newFileName);
                 
                 try {
-                    // Kopiujemy plik z nową nazwą
                     Files.copy(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                     successCount++;
                     System.out.println("Przeniesiono " + fileName + " -> " + newFileName); // Translated
