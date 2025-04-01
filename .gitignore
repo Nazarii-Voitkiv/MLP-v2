@@ -4,8 +4,4 @@ MLP-v2.iml
 resized_data/.DS_Store
 .DS_Store
 /.vscode
-letters_dataset.csv
-/dataset
-model.dat
-/data
-/test_data
+
